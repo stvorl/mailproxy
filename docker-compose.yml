@@ -1,0 +1,56 @@
+version: '3.8'
+services:
+  dovecot:
+    build: ./docker/dovecot
+    volumes:
+      - ./maildata:/var/mail
+    ports:
+      - "143:143"
+      - "993:993"
+    restart: unless-stopped
+    networks:
+      - mail
+
+  postfix:
+    build: ./docker/postfix
+    volumes:
+      - ./maildata:/var/mail
+    ports:
+      - "127.0.0.1:587:25"
+    restart: unless-stopped
+    networks:
+      - mail
+
+  fetcher:
+    build: ./docker/fetcher
+    volumes:
+      - ./maildata:/var/mail
+      - ./accounts.yml:/app/accounts.yml:ro
+    depends_on:
+      - dovecot
+      - postfix
+    restart: unless-stopped
+    networks:
+      - mail
+
+  # Roundcube is optional. Start with: make up-roundcube
+  roundcube:
+    image: roundcube/roundcubemail:1.6.x-apache
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=dovecot
+      - ROUNDCUBEMAIL_SMTP_SERVER=postfix
+      - ROUNDCUBEMAIL_SMTP_PORT=25
+    ports:
+      - "8080:80"
+    depends_on:
+      - dovecot
+      - postfix
+    profiles:
+      - roundcube
+    restart: unless-stopped
+    networks:
+      - mail
+
+networks:
+  mail:
+    driver: bridge

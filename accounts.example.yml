@@ -1,0 +1,89 @@
+# Example accounts file for mailproxy.
+# Copy this file to accounts.yml and fill in real credentials.
+
+global:
+  # Where Maildirs are stored inside the containers (matched by docker-compose volume mount).
+  mail_storage_base: "/var/mail"
+  # How often to poll all accounts, in minutes. Per-account override: fetch_interval below.
+  default_fetch_interval: 15
+
+accounts:
+  # -------------------------------------------------------------------------
+  # Account 1: implicit SSL (POP3S on port 995), outbound with required TLS
+  # -------------------------------------------------------------------------
+  - address: alice@example.com
+
+    # Inbound: how to fetch mail from the remote provider via POP3.
+    #
+    # port + tls combinations:
+    #   port: 995, tls: true   — POP3S, implicit SSL (connection is encrypted from the start)
+    #   port: 110, tls: true   — POP3 + STARTTLS (plain connection upgraded to TLS)
+    #   port: 110, tls: false  — plain, unencrypted (avoid unless no other option)
+    #
+    # delete_remote: true  — delete messages from remote after fetching
+    # delete_remote: false — leave copies on remote (useful for testing)
+    inbound:
+      host: pop.example.com
+      port: 995
+      proto: pop3
+      tls: true
+      user: alice@example.com
+      pass: remote_password_here
+      delete_remote: true
+
+    # Outbound: SMTP relay used by Postfix to send mail from this account.
+    # Each account must have its own relay — there is no shared/global relay.
+    #
+    # port + tls combinations:
+    #   port: 587, tls: true   — submission with STARTTLS (most common)
+    #   port: 465, tls: true   — SMTPS, implicit SSL
+    #   port: 25,  tls: false  — plain MTA port, no auth (rare; use only if required)
+    #
+    # tls: true  — Postfix will require TLS for this relay (smtp_tls_policy: encrypt)
+    # tls: false — Postfix will try TLS opportunistically (smtp_tls_policy: may)
+    outbound:
+      host: smtp.example.com
+      port: 587
+      tls: true
+      user: alice@example.com
+      pass: smtp_password_here
+
+    # Local: IMAP credentials used by Dovecot for this mailbox.
+    # The user field is the IMAP login (typically same as the email address).
+    # The password is independent from the remote password — set it freely.
+    local:
+      user: alice@example.com
+      password: local_imap_password
+      # fetch_interval: 10  # optional per-account override in minutes
+
+  # -------------------------------------------------------------------------
+  # Account 2: STARTTLS inbound (port 110), outbound with required TLS
+  # -------------------------------------------------------------------------
+  - address: bob@example.org
+
+    inbound:
+      host: pop.other.net
+      port: 110            # plain port; tls: true triggers STARTTLS after connect
+      proto: pop3
+      tls: true
+      user: bob@example.org
+      pass: remote_password_here
+      delete_remote: false
+
+    outbound:
+      host: smtp.other.net
+      port: 587
+      tls: true
+      user: bob@example.org
+      pass: smtp_password_here
+
+    local:
+      user: bob@example.org
+      password: local_imap_password
+
+# Security notes:
+# - This file contains plaintext credentials. Never commit accounts.yml to
+#   version control (it is listed in .gitignore).
+# - Restrict file permissions: chmod 600 accounts.yml
+# - The fetcher re-reads this file every fetch cycle. Changes take effect
+#   on the next cycle without restarting containers.

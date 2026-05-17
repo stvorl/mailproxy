@@ -1,0 +1,27 @@
+# Ignore local secrets and runtime data
+.env
+accounts.yml
+accounts.yml.backup
+
+# Mail storage and runtime
+maildata/
+*.db
+
+# Docker compose overrides
+docker-compose.override.yml
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+thumbs.db
