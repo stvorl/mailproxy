@@ -96,14 +96,29 @@ def write_dovecot_passwd(accounts):
 def write_alias_map(accounts):
     """
     Write /var/credentials/alias_map for the Roundcube fix_identity plugin.
-    Format: imap-login<TAB>canonical-email
+    Format: imap-login<TAB>canonical-email<TAB>canonical-password
     Only alias logins (where imap_user != mailbox) are included.
+    The canonical password comes from the entry where imap_user == mailbox;
+    if absent, aliases are listed without a password (identity fix only, no re-login).
     """
     lines = []
     for a in accounts:
-        for imap_user, _password, mailbox in get_logins(a):
+        logins = get_logins(a)
+        # Find canonical password: the entry whose login name equals the mailbox.
+        canonical_pass = next(
+            (pwd for user, pwd, mb in logins if user == mb),
+            None
+        )
+        if canonical_pass is None:
+            mailbox = get_mailbox(a)
+            print(f"WARNING: {mailbox} has logins but no local.password — "
+                  f"Roundcube re-login won't work for alias users", flush=True)
+        for imap_user, _password, mailbox in logins:
             if imap_user != mailbox:
-                lines.append(f"{imap_user}\t{mailbox}")
+                if canonical_pass:
+                    lines.append(f"{imap_user}\t{mailbox}\t{canonical_pass}")
+                else:
+                    lines.append(f"{imap_user}\t{mailbox}")
     _write_file(os.path.join(CREDS_BASE, 'alias_map'), '\n'.join(lines) + '\n' if lines else '')
 
 

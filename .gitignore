@@ -5,6 +5,7 @@ accounts.yml.backup
 
 # Mail storage and runtime
 maildata/
+rcdata/
 *.db
 
 # Docker compose overrides

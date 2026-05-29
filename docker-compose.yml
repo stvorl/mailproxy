@@ -50,6 +50,7 @@ services:
       - ./logs/roundcube:/var/www/html/logs
       - ./docker/roundcube/plugins/fix_identity:/var/www/html/plugins/fix_identity:ro
       - creds:/var/credentials:ro
+      - ./rcdata:/var/roundcube/db
     ports:
       - "8080:80"
     depends_on:

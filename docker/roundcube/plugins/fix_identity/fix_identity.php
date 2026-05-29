@@ -18,7 +18,26 @@ class fix_identity extends rcube_plugin
 
     public function init()
     {
+        // Rewrite alias login to canonical username BEFORE Roundcube does the
+        // DB user lookup — this makes all alias logins share one user record
+        // (same address book, settings, etc.).
+        $this->add_hook('authenticate', [$this, 'rewrite_username']);
+
         $this->add_hook('login_after', [$this, 'fix_default_identity']);
+    }
+
+    public function rewrite_username($args)
+    {
+        $entry = $this->resolve($args['user']);
+        if ($entry) {
+            $args['user'] = $entry['user'];
+            // Substitute the canonical password so Dovecot can authenticate
+            // the canonical username (alias entries have '!' in passdb).
+            if (!empty($entry['pass'])) {
+                $args['pass'] = $entry['pass'];
+            }
+        }
+        return $args;
     }
 
     public function fix_default_identity($args)
@@ -63,9 +82,12 @@ class fix_identity extends rcube_plugin
             if ($line === '' || $line[0] === '#') {
                 continue;
             }
-            $parts = preg_split('/\s+/', trim($line), 2);
-            if (count($parts) === 2 && $parts[0] === $login) {
-                return $parts[1];
+            $parts = preg_split('/\t/', trim($line), 3);
+            if (count($parts) >= 2 && $parts[0] === $login) {
+                return [
+                    'user' => $parts[1],
+                    'pass' => $parts[2] ?? null,
+                ];
             }
         }
 

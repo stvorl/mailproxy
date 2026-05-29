@@ -83,8 +83,8 @@ accounts:
     # receives mail via fetcher but has no IMAP access.
     local:
       mailbox: bob@example.org
-      #password: bobs_default_password  # Either using a global password...
-      logins: # Or using multiple login-password pairs:
+      password: bobs_default_password  # This password is mandatory, if even no user is logging under "base" login
+      logins: # We can add multiple logins for the same mailbox, e.g. to have separate credentials.  
         - user: bob
           password: bobs_password
         - user: carol
