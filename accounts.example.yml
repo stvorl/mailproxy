@@ -49,8 +49,8 @@ accounts:
       pass: smtp_password_here
 
     # Local: IMAP credentials used by Dovecot for this mailbox.
-    # The user field is the IMAP login (typically same as the email address).
-    # The password is independent from the remote password — set it freely.
+    #
+    # Simple form (backwards-compatible): single login, username = mailbox name.
     local:
       user: alice@example.com
       password: local_imap_password
@@ -77,9 +77,18 @@ accounts:
       user: bob@example.org
       pass: smtp_password_here
 
+    # Local: multiple logins sharing one mailbox.
+    # 'mailbox' sets the storage path; 'logins' lists all allowed IMAP users.
+    # If 'password' is omitted and 'logins' is absent, the mailbox still
+    # receives mail via fetcher but has no IMAP access.
     local:
-      user: bob@example.org
-      password: local_imap_password
+      mailbox: bob@example.org
+      #password: bobs_default_password  # Either using a global password...
+      logins: # Or using multiple login-password pairs:
+        - user: bob
+          password: bobs_password
+        - user: carol
+          password: carols_password
 
 # Security notes:
 # - This file contains plaintext credentials. Never commit accounts.yml to

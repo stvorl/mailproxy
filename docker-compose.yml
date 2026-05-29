@@ -45,8 +45,11 @@ services:
       - ROUNDCUBEMAIL_DEFAULT_HOST=dovecot
       - ROUNDCUBEMAIL_SMTP_SERVER=postfix
       - ROUNDCUBEMAIL_SMTP_PORT=25
+      - ROUNDCUBEMAIL_PLUGINS=archive,zipdownload,fix_identity
     volumes:
       - ./logs/roundcube:/var/www/html/logs
+      - ./docker/roundcube/plugins/fix_identity:/var/www/html/plugins/fix_identity:ro
+      - creds:/var/credentials:ro
     ports:
       - "8080:80"
     depends_on:
