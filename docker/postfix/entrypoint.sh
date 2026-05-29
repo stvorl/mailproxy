@@ -1,6 +1,11 @@
 #!/bin/sh
 set -e
 
+umask 022
+mkdir -p /var/log/postfix
+touch /var/log/postfix/mail.log
+chmod 644 /var/log/postfix/mail.log
+
 MAPS_DIR=/var/mail
 
 # Wait up to 90 seconds for the fetcher to generate relay maps.

@@ -4,6 +4,7 @@ services:
     build: ./docker/dovecot
     volumes:
       - ./maildata:/var/mail
+      - ./logs/dovecot:/var/log/dovecot
     ports:
       - "143:143"
       - "993:993"
@@ -15,6 +16,7 @@ services:
     build: ./docker/postfix
     volumes:
       - ./maildata:/var/mail
+      - ./logs/postfix:/var/log/postfix
     ports:
       - "127.0.0.1:587:25"
     restart: unless-stopped
@@ -26,6 +28,7 @@ services:
     volumes:
       - ./maildata:/var/mail
       - ./accounts.yml:/app/accounts.yml:ro
+      - ./logs/fetcher:/var/log/fetcher
     depends_on:
       - dovecot
       - postfix
@@ -40,6 +43,8 @@ services:
       - ROUNDCUBEMAIL_DEFAULT_HOST=dovecot
       - ROUNDCUBEMAIL_SMTP_SERVER=postfix
       - ROUNDCUBEMAIL_SMTP_PORT=25
+    volumes:
+      - ./logs/roundcube:/var/www/html/logs
     ports:
       - "8080:80"
     depends_on:

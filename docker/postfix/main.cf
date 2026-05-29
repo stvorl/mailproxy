@@ -33,3 +33,6 @@ smtp_tls_policy_maps = hash:/etc/postfix/tls_policy
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 
 compatibility_level = 2
+
+# Log to file instead of syslog (Docker-friendly, Postfix 3.4+)
+maillog_file = /var/log/postfix/mail.log
