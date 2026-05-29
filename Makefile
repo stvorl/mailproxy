@@ -6,7 +6,7 @@ ifeq ($(ENABLE_ROUNDCUBE),true)
   COMPOSE_FLAGS := --profile roundcube
 endif
 
-.PHONY: init build up down logs restart exec-postfix postfix-reload
+.PHONY: init build up down logs restart exec-postfix postfix-reload export import
 
 init:
 	sh ./scripts/init.sh
@@ -39,3 +39,24 @@ postfix-reload:
 		done && \
 		chmod 600 /etc/postfix/sasl_passwd /etc/postfix/sasl_passwd.db 2>/dev/null || true && \
 		postfix reload'
+
+# make export FILE=backup.tar.gz
+export:
+ifndef FILE
+	$(error FILE is not set. Usage: make export FILE=backup.tar.gz)
+endif
+	$(MAKE) down
+	tar -czf $(FILE) maildata/ rcdata/ accounts.yml .env
+	@echo "Exported to $(FILE)"
+	@echo "Start servers again with: make up"
+
+# make import FILE=backup.tar.gz
+import:
+ifndef FILE
+	$(error FILE is not set. Usage: make import FILE=backup.tar.gz)
+endif
+	@echo "Clearing maildata/ and rcdata/ ..."
+	rm -rf maildata rcdata
+	tar -xzf $(FILE)
+	@echo "Imported from $(FILE)"
+	@echo "Start servers with: make up"
