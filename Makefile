@@ -32,7 +32,7 @@ exec-postfix:
 postfix-reload:
 	docker compose exec postfix sh -c '\
 		for map in sasl_passwd sender_relay tls_policy; do \
-			[ -f /var/mail/$$map ] && cp /var/mail/$$map /etc/postfix/$$map && postmap /etc/postfix/$$map && echo "reloaded $$map"; \
+			[ -f /var/credentials/$$map ] && cp /var/credentials/$$map /etc/postfix/$$map && postmap /etc/postfix/$$map && echo "reloaded $$map"; \
 		done && \
 		chmod 600 /etc/postfix/sasl_passwd /etc/postfix/sasl_passwd.db 2>/dev/null || true && \
 		postfix reload'

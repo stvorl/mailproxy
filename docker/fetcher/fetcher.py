@@ -6,6 +6,7 @@ import yaml
 
 ACCOUNTS_FILE = '/app/accounts.yml'
 MAIL_BASE = '/var/mail'
+CREDS_BASE = '/var/credentials'
 
 
 def _write_file(path, content):
@@ -22,7 +23,7 @@ def write_dovecot_passwd(accounts):
         f"{a['local']['user']}:{{PLAIN}}{a['local']['password']}"
         for a in accounts
     ]
-    _write_file(os.path.join(MAIL_BASE, 'passwd'), '\n'.join(lines) + '\n')
+    _write_file(os.path.join(CREDS_BASE, 'passwd'), '\n'.join(lines) + '\n')
 
 
 def write_postfix_maps(accounts):
@@ -55,15 +56,15 @@ def write_postfix_maps(accounts):
         tls_map[relay] = 'encrypt' if use_tls else 'may'
 
     _write_file(
-        os.path.join(MAIL_BASE, 'sender_relay'),
+        os.path.join(CREDS_BASE, 'sender_relay'),
         ''.join(line + '\n' for line in sender_relay_lines),
     )
     _write_file(
-        os.path.join(MAIL_BASE, 'sasl_passwd'),
+        os.path.join(CREDS_BASE, 'sasl_passwd'),
         ''.join(f"{relay} {creds}\n" for relay, creds in sasl_map.items()),
     )
     _write_file(
-        os.path.join(MAIL_BASE, 'tls_policy'),
+        os.path.join(CREDS_BASE, 'tls_policy'),
         ''.join(f"{relay} {policy}\n" for relay, policy in tls_map.items()),
     )
 
@@ -126,6 +127,7 @@ def main():
         interval = cfg.get('global', {}).get('default_fetch_interval', interval)
 
         if accounts != prev_accounts:
+            os.makedirs(CREDS_BASE, exist_ok=True)
             write_dovecot_passwd(accounts)
             write_postfix_maps(accounts)
             prev_accounts = accounts

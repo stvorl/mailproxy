@@ -4,6 +4,7 @@ services:
     build: ./docker/dovecot
     volumes:
       - ./maildata:/var/mail
+      - creds:/var/credentials:ro
       - ./logs/dovecot:/var/log/dovecot
     ports:
       - "143:143"
@@ -15,7 +16,7 @@ services:
   postfix:
     build: ./docker/postfix
     volumes:
-      - ./maildata:/var/mail
+      - creds:/var/credentials:ro
       - ./logs/postfix:/var/log/postfix
     ports:
       - "127.0.0.1:587:25"
@@ -27,6 +28,7 @@ services:
     build: ./docker/fetcher
     volumes:
       - ./maildata:/var/mail
+      - creds:/var/credentials
       - ./accounts.yml:/app/accounts.yml:ro
       - ./logs/fetcher:/var/log/fetcher
     depends_on:
@@ -59,3 +61,6 @@ services:
 networks:
   mail:
     driver: bridge
+
+volumes:
+  creds:

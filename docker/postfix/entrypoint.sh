@@ -6,7 +6,7 @@ mkdir -p /var/log/postfix
 touch /var/log/postfix/mail.log
 chmod 644 /var/log/postfix/mail.log
 
-MAPS_DIR=/var/mail
+MAPS_DIR=/var/credentials
 
 # Wait up to 90 seconds for the fetcher to generate relay maps.
 # The fetcher writes maps before its first fetch cycle, so this
