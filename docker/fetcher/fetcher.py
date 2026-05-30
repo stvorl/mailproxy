@@ -240,9 +240,14 @@ def fetch_account(account):
 
 
 def fetch_pop3(account):
+    ib = account['inbound']
+    host = ib['host']
+    port = ib.get('port', 995 if ib.get('tls') else 110)
+    use_ssl = ib.get('tls', False) and port == 995
+    label = get_mailbox(account)
 
     ensure_maildir(account)
-    md = mailbox.Maildir(os.path.join(MAIL_BASE, get_mailbox(account), 'Maildir'))
+    md = mailbox.Maildir(os.path.join(MAIL_BASE, label, 'Maildir'))
 
     try:
         if use_ssl:
@@ -264,10 +269,10 @@ def fetch_pop3(account):
                 conn.dele(num)
 
         conn.quit()
-        log(f"Fetched {len(items)} message(s) for {local['user']}")
+        log(f"Fetched {len(items)} message(s) via POP3 for {label}")
 
     except Exception as e:
-        log(f"ERROR fetching {local['user']} from {host}: {e}")
+        log(f"ERROR fetching POP3 {label} from {host}: {e}")
 
 
 def main():
