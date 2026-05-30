@@ -3,6 +3,7 @@
 # then hand off to the official Roundcube entrypoint.
 
 IMAP_TLS=${IMAP_TLS:-1}
+SMTP_TLS=${SMTP_TLS:-1}
 
 export ROUNDCUBEMAIL_DEFAULT_PORT=143
 
@@ -10,6 +11,10 @@ if [ "$IMAP_TLS" -ge 2 ]; then
     export ROUNDCUBEMAIL_DEFAULT_HOST=tls://dovecot
 else
     export ROUNDCUBEMAIL_DEFAULT_HOST=dovecot
+fi
+
+if [ "$SMTP_TLS" -ge 2 ]; then
+    export ROUNDCUBEMAIL_SMTP_SERVER=tls://postfix
 fi
 
 # Run official entrypoint setup + apache, but intercept after setup
@@ -38,6 +43,14 @@ if [ "$IMAP_TLS" -ge 2 ]; then
     CONFIG=/var/www/html/config/config.inc.php
     if [ -f "$CONFIG" ] && ! grep -q 'imap_conn_options' "$CONFIG"; then
         printf '\n$config["imap_conn_options"] = ["ssl" => ["verify_peer" => false, "verify_peer_name" => false]];\n' >> "$CONFIG"
+    fi
+fi
+
+# Disable SSL verification for SMTP if TLS >= 2 (self-signed cert on internal network)
+if [ "$SMTP_TLS" -ge 2 ]; then
+    CONFIG=/var/www/html/config/config.inc.php
+    if [ -f "$CONFIG" ] && ! grep -q 'smtp_conn_options' "$CONFIG"; then
+        printf '\n$config["smtp_conn_options"] = ["ssl" => ["verify_peer" => false, "verify_peer_name" => false]];\n' >> "$CONFIG"
     fi
 fi
 

@@ -49,6 +49,7 @@ services:
     build: ./docker/roundcube
     environment:
       - IMAP_TLS=${IMAP_TLS:-1}
+      - SMTP_TLS=${SMTP_TLS:-1}
       - ROUNDCUBEMAIL_SMTP_SERVER=postfix
       - ROUNDCUBEMAIL_SMTP_PORT=25
       - ROUNDCUBEMAIL_PLUGINS=archive,zipdownload,fix_identity,fetch_trigger

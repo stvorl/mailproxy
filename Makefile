@@ -24,7 +24,7 @@ down:
 	docker compose $(COMPOSE_FLAGS) down
 
 logs:
-	exec docker compose $(COMPOSE_FLAGS) logs -f --tail=200
+	@docker compose $(COMPOSE_FLAGS) logs -f --tail=200 >/dev/tty 2>/dev/tty
 
 restart: down up
 
