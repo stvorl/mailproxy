@@ -1,5 +1,6 @@
 import time
 import poplib
+import imaplib
 import mailbox
 import os
 import yaml
@@ -179,12 +180,59 @@ def ensure_maildir(account):
     mailbox.Maildir(path, create=True)
 
 
-def fetch_account(account):
+def fetch_imap(account):
     ib = account['inbound']
-    local = account['local']
     host = ib['host']
-    port = ib.get('port', 110)
-    use_ssl = ib.get('tls', False) and port == 995
+    port = ib.get('port', 993 if ib.get('tls') else 143)
+    use_ssl = ib.get('tls', False) and port == 993
+    delete_remote = ib.get('delete_remote', True)
+    folders = [f.strip() for f in str(ib.get('folder', 'INBOX')).split(',') if f.strip()]
+    label = get_mailbox(account)
+
+    ensure_maildir(account)
+    md = mailbox.Maildir(os.path.join(MAIL_BASE, label, 'Maildir'))
+
+    try:
+        if use_ssl:
+            conn = imaplib.IMAP4_SSL(host, port)
+        else:
+            conn = imaplib.IMAP4(host, port)
+            if ib.get('tls'):
+                conn.starttls()
+
+        conn.login(ib['user'], ib['pass'])
+
+        total = 0
+        for folder in folders:
+            conn.select(folder)
+            _, data = conn.search(None, 'ALL')
+            uids = data[0].split()
+            for uid in uids:
+                _, msg_data = conn.fetch(uid, '(RFC822)')
+                raw = msg_data[0][1]
+                md.add(raw)
+                if delete_remote:
+                    conn.store(uid, '+FLAGS', '\\Deleted')
+                total += 1
+            if delete_remote:
+                conn.expunge()
+
+        conn.logout()
+        print(f"Fetched {total} message(s) via IMAP for {label}", flush=True)
+
+    except Exception as e:
+        print(f"ERROR fetching IMAP {label} from {host}: {e}", flush=True)
+
+
+def fetch_account(account):
+    proto = account['inbound'].get('proto', 'pop3').lower()
+    if proto == 'imap':
+        fetch_imap(account)
+    else:
+        fetch_pop3(account)
+
+
+def fetch_pop3(account):
 
     ensure_maildir(account)
     md = mailbox.Maildir(os.path.join(MAIL_BASE, get_mailbox(account), 'Maildir'))

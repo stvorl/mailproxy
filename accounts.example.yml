@@ -94,3 +94,40 @@ accounts:
 # - Restrict file permissions: chmod 600 accounts.yml
 # - The fetcher re-reads this file every fetch cycle. Changes take effect
 #   on the next cycle without restarting containers.
+
+  # -------------------------------------------------------------------------
+  # Account 3: fetch via IMAP instead of POP3
+  # -------------------------------------------------------------------------
+  # Use proto: imap when the remote server does not support POP3, or when you
+  # need to fetch from a specific folder other than INBOX.
+  #
+  # folder: comma-separated list of IMAP folders to fetch from (default: INBOX)
+  # delete_remote: true  — delete messages after fetching (EXPUNGE)
+  # delete_remote: false — leave messages on the server
+  #
+  # port + tls combinations:
+  #   port: 993, tls: true  — IMAPS, implicit SSL
+  #   port: 143, tls: true  — IMAP + STARTTLS
+  #   port: 143, tls: false — plain IMAP (avoid unless no other option)
+  - address: charlie@example.com
+
+    inbound:
+      host: imap.example.com
+      port: 993
+      proto: imap
+      tls: true
+      folder: INBOX               # optional; comma-separated, e.g. "INBOX, SPAM"
+      user: charlie@example.com
+      pass: remote_password_here
+      delete_remote: true
+
+    outbound:
+      host: smtp.example.com
+      port: 587
+      tls: true
+      user: charlie@example.com
+      pass: smtp_password_here
+
+    local:
+      user: charlie@example.com
+      password: local_charlie_password
