@@ -2,8 +2,6 @@
 # Copy this file to accounts.yml and fill in real credentials.
 
 global:
-  # Where Maildirs are stored inside the containers (matched by docker-compose volume mount).
-  mail_storage_base: "/var/mail"
   # How often to poll all accounts, in minutes. Per-account override: fetch_interval below.
   default_fetch_interval: 15
 
