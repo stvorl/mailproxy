@@ -1,40 +1,152 @@
-# mailproxy — IMAP/SMTP proxy stack (prototype)
+# mailproxy
 
-This repository contains a small Docker Compose prototype that provides:
-- Dovecot (IMAP)
-- Postfix (SMTP relay, optional per-sender relays)
-- A simple Python fetcher that downloads mail via POP3 into Maildir
-- Optional Roundcube web UI
+A self-hosted Docker Compose stack that pulls mail from remote POP3 accounts and exposes it locally via IMAP and SMTP. Designed for households or small teams that need a single always-on mail hub accessible by multiple clients and users. Also useful when you want to consolidate mail from several providers into one place, or when remote mailbox storage is limited and you need to download and delete messages to free space on the server.
 
-Quick start
+## Components
 
-1. Initialize files:
+| Service | Image | Role |
+|---|---|---|
+| **fetcher** | Python 3.11 | Polls POP3 inboxes, delivers to Maildir, generates Dovecot/Postfix credential maps |
+| **dovecot** | Debian / Dovecot 2.4 | IMAP server (ports 143 / 993) |
+| **postfix** | Debian / Postfix 3.x | SMTP relay with per-sender authentication (port 587) |
+| **roundcube** *(optional)* | roundcube/roundcubemail 1.6 | Web UI, enabled via `ENABLE_ROUNDCUBE=true` |
+
+## Quick start
 
 ```sh
+# 1. Create initial config files and copy accounts.example.yml → accounts.yml
 make init
-# or: sh ./scripts/init.sh
-```
+# If migrating from another machine, use `make import FILE=backup.tar.gz`
+# instead of steps 1–2 — it restores maildata, rcdata, accounts.yml and .env.
 
-2. Edit `.env` and `accounts.yml` with your real credentials.
+# 2. Fill in credentials
+$EDITOR accounts.yml
+$EDITOR .env          # set ENABLE_ROUNDCUBE=true to turn on the web UI
 
-3. Start the stack:
-
-```sh
+# 3. Start
 make up
-```
 
-4. Logs:
-
-```sh
+# 4. Follow logs
 make logs
 ```
 
-Notes
-- Protect `accounts.yml` and `.env` — they contain credentials. These files
-  are ignored by `.gitignore`.
-- The fetcher periodically reloads `accounts.yml` and updates Dovecot and
-  Postfix maps. There is NO global relay fallback: each account must specify
-  an `outbound` block with SMTP relay credentials. The fetcher will generate
-   per-sender relay maps and SASL passwords for Postfix. After editing
-   `accounts.yml` you may need to run `postmap` and `postfix reload` inside the
-   `postfix` container to apply new maps, or use the provided `make` targets.
+IMAP is available on **port 143**, SMTP on **127.0.0.1:587**, Roundcube on **http://localhost:8080**.
+
+## accounts.yml
+
+All mail accounts are defined in `accounts.yml`. The fetcher re-reads it on every poll cycle — no restart needed.
+
+### Single login (simple form)
+
+```yaml
+global:
+  default_fetch_interval: 15   # minutes
+
+accounts:
+  - address: alice@example.com
+
+    inbound:                    # fetch from remote POP3
+      host: pop.example.com
+      port: 995
+      proto: pop3
+      tls: true
+      user: alice@example.com
+      pass: remote_password
+      delete_remote: true
+
+    outbound:                   # relay outgoing mail via this SMTP server
+      host: smtp.example.com
+      port: 587
+      tls: true
+      user: alice@example.com
+      pass: smtp_password
+
+    local:                      # IMAP credentials (independent from remote)
+      user: alice@example.com
+      password: local_password
+      fetch_interval: 10        # optional override in minutes
+```
+
+### Multiple logins for one mailbox
+
+Several users can share a single mailbox — same Maildir, same address book in Roundcube:
+
+```yaml
+    # inbound and outbount sections as above
+    local:
+      mailbox: bob@example.org   # storage path
+      password: default_pass     # required: used for direct login and as
+                                 # the canonical credential for alias re-login
+      logins:
+        - user: bob
+          password: bobs_pass
+        - user: carol
+          password: carols_pass
+```
+
+When `logins:` is present, logging in as `bob` or `carol` is transparently redirected to the canonical `bob@example.org` session — both see the same inbox, sent items, and contacts. Direct login under the canonical address (`bob@example.org`) remains available using `local.password`.
+
+**Rules:**
+- `local.password` is **required** when `logins:` is used.
+- `local.user` (or `local.mailbox`) sets the mailbox storage directory name.
+- Per-account `fetch_interval` overrides the global default.
+
+## Makefile targets
+
+| Target | Description |
+|---|---|
+| `make up` | Build images and start all services |
+| `make down` | Stop all services |
+| `make restart` | `down` + `up` |
+| `make logs` | Tail logs from all services |
+| `make postfix-reload` | Apply updated relay maps to running Postfix without restart |
+| `make export FILE=<filename>` | Stop services, pack `maildata/`, `rcdata/`, `accounts.yml`, `.env` for migration (tar.gz format) |
+| `make import FILE=<filename>` | Unpack archive into project directory (does not start services) |
+
+## Roundcube
+
+Set `ENABLE_ROUNDCUBE=true` in `.env` to include Roundcube in the stack. Available at **http://localhost:8080**.
+
+Log in with any IMAP username defined in `accounts.yml`. Alias logins (`logins:` entries) are automatically redirected to the canonical account, so all aliases share one address book, drafts folder, and settings.
+
+The Roundcube SQLite database is stored in `./rcdata/` and is included in `make export`.
+
+## Migrating to another machine
+
+```sh
+# On the old machine
+make export FILE=backup.tar.gz
+
+# Copy to new machine
+scp backup.tar.gz newhost:/path/to/mailproxy/
+git clone <this-repo> /path/to/mailproxy && cd /path/to/mailproxy
+
+# On the new machine
+make import FILE=backup.tar.gz
+make up
+```
+
+## Directory layout
+
+```
+accounts.yml          # credentials — NOT committed (gitignored)
+accounts.example.yml  # annotated template
+.env                  # ENABLE_ROUNDCUBE flag — NOT committed
+docker/
+  fetcher/            # Python poller
+  dovecot/            # Dovecot config + Dockerfile
+  postfix/            # Postfix config + entrypoint
+  roundcube/
+    plugins/
+      fix_identity/   # Plugin: alias re-login + From address fix
+maildata/             # Maildirs — NOT committed
+rcdata/               # Roundcube SQLite DB — NOT committed
+logs/                 # Container logs mounted from host — NOT committed
+```
+
+## Security notes
+
+- `accounts.yml` and `.env` contain plaintext credentials. Both are in `.gitignore`. Restrict permissions: `chmod 600 accounts.yml .env`.
+- Dovecot and Postfix credential maps are stored in a named Docker volume (`mailproxy_creds`), not in the project directory. They are regenerated automatically on each fetch cycle and do not need to be backed up.
+- Postfix SMTP relay is bound to `127.0.0.1:587` only — not exposed to the network.
+- IMAP has no TLS inside the Docker network by default. If you expose port 143/993 publicly, enable TLS in `docker/dovecot/dovecot.conf`.
