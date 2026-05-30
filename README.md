@@ -98,8 +98,8 @@ When `logins:` is present, logging in as `bob` or `carol` is transparently redir
 | `make up` | Build images and start all services |
 | `make down` | Stop all services |
 | `make restart` | `down` + `up` |
+| `make rebuild` | Force rebuild all images without Docker cache (use after base image updates) |
 | `make logs` | Tail logs from all services |
-| `make postfix-reload` | Apply updated relay maps to running Postfix without restart |
 | `make export FILE=<filename>` | Stop services, pack `maildata/`, `rcdata/`, `certs/`, `accounts.yml`, `.env` for migration. `certs/mailproxy.key` is root-owned (600) — run with `sudo` to include it. |
 | `make import FILE=<filename>` | Unpack archive into project directory (does not start services) |
 | `make clean` | Stop services and **permanently delete** all private data (`maildata/`, `rcdata/`, `certs/`, `accounts.yml`, `.env`). Requires typing `YES` to confirm. |

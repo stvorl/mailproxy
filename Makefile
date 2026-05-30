@@ -6,13 +6,16 @@ ifeq ($(ENABLE_ROUNDCUBE),true)
   COMPOSE_FLAGS := --profile roundcube
 endif
 
-.PHONY: init build up down logs restart exec-postfix postfix-reload export import clean
+.PHONY: init build rebuild up down logs restart export import clean
 
 init:
 	sh ./scripts/init.sh
 
 build:
-	docker compose --progress quiet build
+	docker compose $(COMPOSE_FLAGS) --progress quiet build
+
+rebuild:
+	docker compose $(COMPOSE_FLAGS) build --no-cache
 
 up: build
 	docker compose $(COMPOSE_FLAGS) up -d --remove-orphans
@@ -27,18 +30,6 @@ logs:
 	@docker compose $(COMPOSE_FLAGS) logs -f --tail=200 >/dev/tty 2>/dev/tty
 
 restart: down up
-
-exec-postfix:
-	docker compose exec postfix sh
-
-# Apply updated relay maps to a running Postfix (after editing accounts.yml)
-postfix-reload:
-	docker compose exec postfix sh -c '\
-		for map in sasl_passwd sender_relay tls_policy; do \
-			[ -f /var/credentials/$$map ] && cp /var/credentials/$$map /etc/postfix/$$map && postmap /etc/postfix/$$map && echo "reloaded $$map"; \
-		done && \
-		chmod 600 /etc/postfix/sasl_passwd /etc/postfix/sasl_passwd.db 2>/dev/null || true && \
-		postfix reload'
 
 # make export FILE=backup.tar.gz
 export:
