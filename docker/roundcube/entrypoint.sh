@@ -31,7 +31,7 @@ exit 0
 SENTINEL
 chmod +x /tmp/mailproxy-bin/apache2-foreground
 
-PATH=/tmp/mailproxy-bin:$PATH /docker-entrypoint.sh apache2-foreground 2>&1 || true
+echo "y" | PATH=/tmp/mailproxy-bin:$PATH /docker-entrypoint.sh apache2-foreground 2>&1 || true
 
 # Patch config.inc.php with imap_conn_options if TLS >= 2
 if [ "$IMAP_TLS" -ge 2 ]; then

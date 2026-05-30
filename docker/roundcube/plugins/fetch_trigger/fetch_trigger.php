@@ -17,7 +17,7 @@ class fetch_trigger extends rcube_plugin
 
     public function trigger_fetch($args)
     {
-        @touch(self::TRIGGER_FILE);
+        touch(self::TRIGGER_FILE);
         return $args;
     }
 }

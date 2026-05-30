@@ -269,6 +269,7 @@ def main():
     prev_accounts = None
     interval = 15
     os.makedirs(SMPH_DIR, exist_ok=True)
+    os.chmod(SMPH_DIR, 0o1777)  # world-writable + sticky, like /tmp
 
     while True:
         try:
