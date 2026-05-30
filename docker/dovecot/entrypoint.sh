@@ -22,7 +22,7 @@ if [ "$IMAP_TLS" -ge 2 ]; then
                 -out /certs/mailproxy.pem \
                 -keyout /certs/mailproxy.key \
                 -subj "/CN=mailproxy" 2>/dev/null
-            chmod 600 /certs/mailproxy.key
+            chmod 644 /certs/mailproxy.key
             echo "Certificate generated at /certs/mailproxy.pem"
             rm -rf /certs/.certlock
         else

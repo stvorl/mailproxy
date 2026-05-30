@@ -34,16 +34,8 @@ ifndef FILE
 	$(error FILE is not set. Usage: make export FILE=backup.tar.gz)
 endif
 	$(MAKE) down
-	@CERTS=""; \
-	for f in certs/mailproxy.pem certs/mailproxy.key; do \
-		[ -r "$$f" ] && CERTS="$$CERTS $$f"; \
-	done; \
-	tar -czf $(FILE) logs/ maildata/ rcdata/ accounts.yml .env $$CERTS; \
-	if [ -n "$$CERTS" ]; then \
-		echo "Exported to $(FILE) (including cert files)"; \
-	else \
-		echo "Exported to $(FILE) (cert files not included — run with sudo to include)"; \
-	fi
+	tar -czf $(FILE) certs/ logs/ maildata/ rcdata/ accounts.yml .env
+	@echo "Exported to $(FILE)"
 	@echo "Start servers again with: make up"
 
 # make import FILE=backup.tar.gz
