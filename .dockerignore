@@ -1,0 +1,18 @@
+# Runtime data — never needed in build context
+maildata/
+rcdata/
+certs/
+logs/
+
+# Secrets
+accounts.yml
+.env
+
+# Dev/editor
+.git/
+.vscode/
+.idea/
+*.md
+Makefile
+scripts/
+docker-compose*.yml
