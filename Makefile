@@ -12,7 +12,7 @@ init:
 	sh ./scripts/init.sh
 
 build:
-	docker compose $(COMPOSE_FLAGS) --progress quiet build
+	docker compose $(COMPOSE_FLAGS) build
 
 rebuild:
 	docker compose $(COMPOSE_FLAGS) build --no-cache
