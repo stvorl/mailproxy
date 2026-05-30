@@ -6,7 +6,7 @@ ifeq ($(ENABLE_ROUNDCUBE),true)
   COMPOSE_FLAGS := --profile roundcube
 endif
 
-.PHONY: init build up down logs restart exec-postfix postfix-reload export import
+.PHONY: init build up down logs restart exec-postfix postfix-reload export import clean
 
 init:
 	sh ./scripts/init.sh
@@ -68,3 +68,18 @@ endif
 	tar -xzf $(FILE) --no-same-owner
 	@echo "Imported from $(FILE)"
 	@echo "Start servers with: make up"
+
+# make clean — stop services and wipe all private data from this instance
+clean:
+	@echo "WARNING: This will permanently delete all mail, credentials and config."
+	@echo "         maildata/, rcdata/, certs/, accounts.yml, .env will be removed."
+	@printf 'Type YES (uppercase) to confirm: '; \
+	read answer; \
+	if [ "$$answer" != "YES" ]; then \
+		echo "Aborted."; \
+		exit 1; \
+	fi
+	-docker compose $(COMPOSE_FLAGS) down 2>/dev/null || true
+	rm -rf maildata rcdata certs
+	rm -f accounts.yml .env
+	@echo "Done. Run 'make init' to start fresh."
