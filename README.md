@@ -100,34 +100,8 @@ When `logins:` is present, logging in as `bob` or `carol` is transparently redir
 | `make restart` | `down` + `up` |
 | `make logs` | Tail logs from all services |
 | `make postfix-reload` | Apply updated relay maps to running Postfix without restart |
-| `make export FILE=<filename>` | Stop services, pack `maildata/`, `rcdata/`, `accounts.yml`, `.env` for migration (tar.gz format) |
+| `make export FILE=<filename>` | Stop services, pack `maildata/`, `rcdata/`, `certs/`, `accounts.yml`, `.env` for migration. `certs/mailproxy.key` is root-owned (600) — run with `sudo` to include it. |
 | `make import FILE=<filename>` | Unpack archive into project directory (does not start services) |
-
-## TLS and network configuration
-
-All listen addresses and TLS levels are configured via `.env`. Defaults are shown in `.env.example`.
-
-### TLS levels (`IMAP_TLS`, `SMTP_TLS`)
-
-| Value | Meaning |
-|---|---|
-| `1` | Plain text only (default) |
-| `2` | TLS available (STARTTLS offered, not required) |
-| `3` | TLS required (connections without STARTTLS are rejected) |
-
-### Listen addresses
-
-| Variable | Default | Description |
-|---|---|---|
-| `IMAP_LISTEN` | `127.0.0.1` | Bind address for IMAP port 143 |
-| `IMAPS_LISTEN` | `127.0.0.1` | Bind address for IMAPS port 993 |
-| `SMTP_LISTEN` | `127.0.0.1` | Bind address for SMTP port 587 |
-| `ROUNDCUBE_LISTEN` | `127.0.0.1` | Bind address for Roundcube HTTP port 8080 |
-| `IMAP_PORT`, `IMAPS_PORT`, `SMTP_PORT`, `ROUNDCUBE_PORT` | as above | Override the host port number |
-
-### Certificate
-
-When `IMAP_TLS` or `SMTP_TLS` ≥ 2, a self-signed certificate is auto-generated at `certs/mailproxy.pem` / `certs/mailproxy.key` on first start. Both Dovecot and Postfix share the same certificate. To use a real certificate, replace these two files before starting the stack.
 
 ## Roundcube
 
@@ -141,16 +115,18 @@ The Roundcube SQLite database is stored in `./rcdata/` and is included in `make 
 
 ```sh
 # On the old machine
-make export FILE=backup.tar.gz
+sudo make export FILE=backup.tar.gz   # sudo includes the TLS private key
 
 # Copy to new machine
 scp backup.tar.gz newhost:/path/to/mailproxy/
 git clone <this-repo> /path/to/mailproxy && cd /path/to/mailproxy
 
 # On the new machine
-make import FILE=backup.tar.gz
+sudo make import FILE=backup.tar.gz   # sudo to restore root-owned key
 make up
 ```
+
+If you run `make export` without `sudo`, the archive will contain `certs/mailproxy.pem` but not the private key. On the new machine the containers will auto-generate a fresh self-signed certificate on first start — which is fine for internal use. Only relevant if you replaced the auto-generated cert with a real one.
 
 ## Directory layout
 
