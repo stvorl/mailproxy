@@ -1,0 +1,180 @@
+#!/bin/sh
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Load .env if present
+if [ -f .env ]; then
+    set -a
+    . ./.env
+    set +a
+fi
+
+COMPOSE_FLAGS=""
+if [ "${ENABLE_ROUNDCUBE}" = "true" ]; then
+    COMPOSE_FLAGS="--profile roundcube"
+fi
+
+usage() {
+    cat <<EOF
+Usage: ./mpcontrol <command> [args]
+
+Commands:
+  init                  Create .env and accounts.yml from templates
+  build                 Build Docker images
+  rebuild               Rebuild images without cache (use after base image updates)
+  up                    Build images and start all services
+  down                  Stop all services
+  restart               Stop and start all services
+  logs                  Tail logs from all services
+  export <file>         Stop services and pack all data into archive
+  import <file>         Unpack archive into project directory (does not start services)
+  clean                 Stop services and permanently delete all private data
+EOF
+}
+
+cmd_init() {
+    echo "Initializing mailproxy in $SCRIPT_DIR"
+
+    if [ -f .env ]; then
+        echo ".env already exists"
+    elif [ -f .env.example ]; then
+        cp .env.example .env
+        echo "Created .env from .env.example"
+    else
+        echo "No .env.example found — create .env manually"
+    fi
+
+    if [ -f accounts.yml ]; then
+        echo "accounts.yml already exists"
+    elif [ -f accounts.example.yml ]; then
+        cp accounts.example.yml accounts.yml
+        echo "Created accounts.yml from accounts.example.yml"
+    else
+        echo "No accounts.example.yml found — create accounts.yml manually"
+    fi
+
+    chmod 600 accounts.yml .env 2>/dev/null || true
+
+    mkdir -p maildata
+    chmod 700 maildata || true
+    echo "Ensured maildata/ exists with restricted permissions"
+
+    mkdir -p certs
+    echo "Ensured certs/ exists"
+
+    # Sanity check: every account should have an outbound section
+    if [ -f accounts.yml ]; then
+        num_accounts=$(grep -cE '^\s*address:' accounts.yml || true)
+        num_outbound=$(grep -cE '^\s*outbound:' accounts.yml || true)
+        if [ "$num_accounts" -gt 0 ] && [ "$num_outbound" -lt "$num_accounts" ]; then
+            echo
+            echo "WARNING: accounts.yml has $num_accounts account(s) but only $num_outbound outbound entries."
+            echo "Each account must include an 'outbound' block. See accounts.example.yml."
+        fi
+    fi
+
+    echo
+    echo "Next steps:"
+    echo "  1) Edit accounts.yml with your credentials"
+    echo "  2) Edit .env if needed (e.g. set ENABLE_ROUNDCUBE=true)"
+    echo "  3) Run: ./mpcontrol up"
+    echo "  4) Follow logs: ./mpcontrol logs"
+    echo
+    echo "Tip: keep accounts.yml and .env out of version control (they are in .gitignore)"
+}
+
+cmd_build() {
+    # shellcheck disable=SC2086
+    docker compose $COMPOSE_FLAGS build
+}
+
+cmd_rebuild() {
+    # shellcheck disable=SC2086
+    docker compose $COMPOSE_FLAGS build --no-cache
+}
+
+cmd_up() {
+    # shellcheck disable=SC2086
+    docker compose $COMPOSE_FLAGS build
+    # shellcheck disable=SC2086
+    docker compose $COMPOSE_FLAGS up -d --remove-orphans
+}
+
+cmd_down() {
+    # shellcheck disable=SC2086
+    docker compose $COMPOSE_FLAGS down
+}
+
+cmd_logs() {
+    # Redirect both stdout and stderr to /dev/tty so output is visible even
+    # when the script itself is called inside a pipeline or non-tty context.
+    # shellcheck disable=SC2086
+    docker compose $COMPOSE_FLAGS logs -f --tail=200 >/dev/tty 2>/dev/tty
+}
+
+cmd_restart() {
+    cmd_down
+    cmd_up
+}
+
+cmd_export() {
+    FILE="$1"
+    if [ -z "$FILE" ]; then
+        echo "Error: file argument required." >&2
+        echo "Usage: ./mpcontrol export <file.tar.gz>" >&2
+        exit 1
+    fi
+    cmd_down
+    tar -czf "$FILE" certs/ logs/ maildata/ rcdata/ accounts.yml .env
+    echo "Exported to $FILE"
+    echo "Start servers again with: ./mpcontrol up"
+}
+
+cmd_import() {
+    FILE="$1"
+    if [ -z "$FILE" ]; then
+        echo "Error: file argument required." >&2
+        echo "Usage: ./mpcontrol import <file.tar.gz>" >&2
+        exit 1
+    fi
+    echo "Clearing logs/, maildata/, rcdata/ and certs/ ..."
+    rm -rf logs maildata rcdata certs
+    tar -xzf "$FILE" --no-same-owner
+    echo "Imported from $FILE"
+    echo "Start servers with: ./mpcontrol up"
+}
+
+cmd_clean() {
+    echo "WARNING: This will permanently delete all mail, credentials and config."
+    echo "         logs/, maildata/, rcdata/, certs/, accounts.yml, .env will be removed."
+    printf 'Type YES (uppercase) to confirm: '
+    read -r answer
+    if [ "$answer" != "YES" ]; then
+        echo "Aborted."
+        exit 1
+    fi
+    # shellcheck disable=SC2086
+    docker compose $COMPOSE_FLAGS down 2>/dev/null || true
+    rm -rf logs maildata rcdata certs
+    rm -f accounts.yml .env
+    echo "Done. Run './mpcontrol init' to start fresh."
+}
+
+COMMAND="${1:-}"
+if [ $# -gt 0 ]; then shift; fi
+
+case "$COMMAND" in
+    init)    cmd_init ;;
+    build)   cmd_build ;;
+    rebuild) cmd_rebuild ;;
+    up)      cmd_up ;;
+    down)    cmd_down ;;
+    logs)    cmd_logs ;;
+    restart) cmd_restart ;;
+    export)  cmd_export "$@" ;;
+    import)  cmd_import "$@" ;;
+    clean)   cmd_clean ;;
+    *)       usage; exit 1 ;;
+esac
