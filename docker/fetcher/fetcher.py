@@ -4,6 +4,11 @@ import imaplib
 import mailbox
 import os
 import yaml
+from datetime import datetime, timezone
+
+def log(*args):
+    ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+    print(ts, *args, flush=True)
 
 ACCOUNTS_FILE = '/app/accounts.yml'
 MAIL_BASE = '/var/mail'
@@ -114,8 +119,8 @@ def write_alias_map(accounts):
         )
         if canonical_pass is None:
             mailbox = get_mailbox(a)
-            print(f"WARNING: {mailbox} has logins but no local.password — "
-                  f"Roundcube re-login won't work for alias users", flush=True)
+            log(f"WARNING: {mailbox} has logins but no local.password — "
+                  f"Roundcube re-login won't work for alias users")
         for imap_user, _password, mailbox in logins:
             if imap_user != mailbox:
                 if canonical_pass:
@@ -149,7 +154,7 @@ def write_postfix_maps(accounts):
         use_tls = ob.get('tls', True)  # default: require TLS
 
         if not (host and user and passwd):
-            print(f"WARNING: {sender} is missing outbound host/user/pass — skipping", flush=True)
+            log(f"WARNING: {sender} is missing outbound host/user/pass — skipping")
             continue
 
         relay = f"[{host}]:{port}"
@@ -220,10 +225,10 @@ def fetch_imap(account):
                 conn.expunge()
 
         conn.logout()
-        print(f"Fetched {total} message(s) via IMAP for {label}", flush=True)
+        log(f"Fetched {total} message(s) via IMAP for {label}")
 
     except Exception as e:
-        print(f"ERROR fetching IMAP {label} from {host}: {e}", flush=True)
+        log(f"ERROR fetching IMAP {label} from {host}: {e}")
 
 
 def fetch_account(account):
@@ -259,10 +264,10 @@ def fetch_pop3(account):
                 conn.dele(num)
 
         conn.quit()
-        print(f"Fetched {len(items)} message(s) for {local['user']}", flush=True)
+        log(f"Fetched {len(items)} message(s) for {local['user']}")
 
     except Exception as e:
-        print(f"ERROR fetching {local['user']} from {host}: {e}", flush=True)
+        log(f"ERROR fetching {local['user']} from {host}: {e}")
 
 
 def main():
@@ -276,7 +281,7 @@ def main():
             with open(ACCOUNTS_FILE) as f:
                 cfg = yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"ERROR reading {ACCOUNTS_FILE}: {e}", flush=True)
+            log(f"ERROR reading {ACCOUNTS_FILE}: {e}")
             time.sleep(60)
             continue
 
@@ -289,7 +294,7 @@ def main():
             write_postfix_maps(accounts)
             write_alias_map(accounts)
             prev_accounts = accounts
-            print("Config reloaded: updated Dovecot passwd, Postfix maps, alias_map", flush=True)
+            log("Config reloaded: updated Dovecot passwd, Postfix maps, alias_map")
 
         for account in accounts:
             fetch_account(account)
@@ -303,7 +308,7 @@ def main():
                     os.remove(FETCH_TRIGGER)
                 except OSError:
                     pass
-                print("Triggered fetch by semaphore", flush=True)
+                log("Triggered fetch by semaphore")
                 break
             time.sleep(2)
 
