@@ -37,6 +37,9 @@ mkdir -p maildata
 chmod 700 maildata || true
 echo "Ensured maildata/ directory exists with restricted permissions"
 
+mkdir -p certs
+echo "Ensured certs/ directory exists (TLS certificates stored here)"
+
 echo
 echo "Next steps:"
 echo "  1) Edit accounts.yml with your real credentials and settings. Each account must have an 'outbound' section (per-account SMTP relay)."

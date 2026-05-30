@@ -103,6 +103,32 @@ When `logins:` is present, logging in as `bob` or `carol` is transparently redir
 | `make export FILE=<filename>` | Stop services, pack `maildata/`, `rcdata/`, `accounts.yml`, `.env` for migration (tar.gz format) |
 | `make import FILE=<filename>` | Unpack archive into project directory (does not start services) |
 
+## TLS and network configuration
+
+All listen addresses and TLS levels are configured via `.env`. Defaults are shown in `.env.example`.
+
+### TLS levels (`IMAP_TLS`, `SMTP_TLS`)
+
+| Value | Meaning |
+|---|---|
+| `1` | Plain text only (default) |
+| `2` | TLS available (STARTTLS offered, not required) |
+| `3` | TLS required (connections without STARTTLS are rejected) |
+
+### Listen addresses
+
+| Variable | Default | Description |
+|---|---|---|
+| `IMAP_LISTEN` | `127.0.0.1` | Bind address for IMAP port 143 |
+| `IMAPS_LISTEN` | `127.0.0.1` | Bind address for IMAPS port 993 |
+| `SMTP_LISTEN` | `127.0.0.1` | Bind address for SMTP port 587 |
+| `ROUNDCUBE_LISTEN` | `127.0.0.1` | Bind address for Roundcube HTTP port 8080 |
+| `IMAP_PORT`, `IMAPS_PORT`, `SMTP_PORT`, `ROUNDCUBE_PORT` | as above | Override the host port number |
+
+### Certificate
+
+When `IMAP_TLS` or `SMTP_TLS` ≥ 2, a self-signed certificate is auto-generated at `certs/mailproxy.pem` / `certs/mailproxy.key` on first start. Both Dovecot and Postfix share the same certificate. To use a real certificate, replace these two files before starting the stack.
+
 ## Roundcube
 
 Set `ENABLE_ROUNDCUBE=true` in `.env` to include Roundcube in the stack. Available at **http://localhost:8080**.
@@ -148,5 +174,6 @@ logs/                 # Container logs mounted from host — NOT committed
 
 - `accounts.yml` and `.env` contain plaintext credentials. Both are in `.gitignore`. Restrict permissions: `chmod 600 accounts.yml .env`.
 - Dovecot and Postfix credential maps are stored in a named Docker volume (`mailproxy_creds`), not in the project directory. They are regenerated automatically on each fetch cycle and do not need to be backed up.
-- Postfix SMTP relay is bound to `127.0.0.1:587` only — not exposed to the network.
-- IMAP has no TLS inside the Docker network by default. If you expose port 143/993 publicly, enable TLS in `docker/dovecot/dovecot.conf`.
+- By default all services listen on `127.0.0.1` only. Set `IMAP_LISTEN`, `SMTP_LISTEN`, `ROUNDCUBE_LISTEN` in `.env` to expose them on the network.
+- When exposing services externally, set `IMAP_TLS=3` and `SMTP_TLS=3` to require TLS. A self-signed certificate is auto-generated in `certs/` on first start. Replace with a real certificate if needed.
+- The private key `certs/mailproxy.key` is created as root:root 600 (by the container). Back it up with `sudo make export`.

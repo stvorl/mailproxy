@@ -2,24 +2,30 @@ version: '3.8'
 services:
   dovecot:
     build: ./docker/dovecot
+    environment:
+      - IMAP_TLS=${IMAP_TLS:-1}
     volumes:
       - ./maildata:/var/mail
       - creds:/var/credentials:ro
       - ./logs/dovecot:/var/log/dovecot
+      - ./certs:/certs
     ports:
-      - "143:143"
-      - "993:993"
+      - "${IMAP_LISTEN:-127.0.0.1}:${IMAP_PORT:-143}:143"
+      - "${IMAPS_LISTEN:-127.0.0.1}:${IMAPS_PORT:-993}:993"
     restart: unless-stopped
     networks:
       - mail
 
   postfix:
     build: ./docker/postfix
+    environment:
+      - SMTP_TLS=${SMTP_TLS:-1}
     volumes:
       - creds:/var/credentials:ro
       - ./logs/postfix:/var/log/postfix
+      - ./certs:/certs
     ports:
-      - "127.0.0.1:587:25"
+      - "${SMTP_LISTEN:-127.0.0.1}:${SMTP_PORT:-587}:25"
     restart: unless-stopped
     networks:
       - mail
@@ -40,9 +46,9 @@ services:
 
   # Roundcube is optional. Start with: make up-roundcube
   roundcube:
-    image: roundcube/roundcubemail:1.6.x-apache
+    build: ./docker/roundcube
     environment:
-      - ROUNDCUBEMAIL_DEFAULT_HOST=dovecot
+      - IMAP_TLS=${IMAP_TLS:-1}
       - ROUNDCUBEMAIL_SMTP_SERVER=postfix
       - ROUNDCUBEMAIL_SMTP_PORT=25
       - ROUNDCUBEMAIL_PLUGINS=archive,zipdownload,fix_identity
@@ -52,7 +58,7 @@ services:
       - creds:/var/credentials:ro
       - ./rcdata:/var/roundcube/db
     ports:
-      - "8080:80"
+      - "${ROUNDCUBE_LISTEN:-127.0.0.1}:${ROUNDCUBE_PORT:-8080}:80"
     depends_on:
       - dovecot
       - postfix

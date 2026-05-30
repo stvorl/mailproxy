@@ -6,6 +6,55 @@ mkdir -p /var/log/postfix
 touch /var/log/postfix/mail.log
 chmod 644 /var/log/postfix/mail.log
 
+SMTP_TLS=${SMTP_TLS:-1}
+
+# Ensure shared certificate exists (TLS >= 2).
+# Uses mkdir as an atomic lock to prevent two containers generating simultaneously.
+if [ "$SMTP_TLS" -ge 2 ]; then
+    mkdir -p /certs
+    if [ ! -f /certs/mailproxy.pem ] || [ ! -f /certs/mailproxy.key ]; then
+        if mkdir /certs/.certlock 2>/dev/null; then
+            echo "Generating self-signed certificate..."
+            openssl req -new -x509 -days 3650 -nodes \
+                -out /certs/mailproxy.pem \
+                -keyout /certs/mailproxy.key \
+                -subj "/CN=mailproxy" 2>/dev/null
+            chmod 600 /certs/mailproxy.key
+            echo "Certificate generated at /certs/mailproxy.pem"
+            rm -rf /certs/.certlock
+        else
+            echo "Waiting for shared certificate to be generated..."
+            while [ -d /certs/.certlock ] || [ ! -f /certs/mailproxy.pem ]; do
+                sleep 1
+            done
+            echo "Certificate ready."
+        fi
+    fi
+fi
+
+case "$SMTP_TLS" in
+    1)
+        postconf -e 'smtpd_tls_security_level = none'
+        echo "SMTP: plain (no TLS)"
+        ;;
+    2)
+        postconf -e 'smtpd_tls_security_level = may'
+        postconf -e 'smtpd_tls_cert_file = /certs/mailproxy.pem'
+        postconf -e 'smtpd_tls_key_file = /certs/mailproxy.key'
+        echo "SMTP: STARTTLS available"
+        ;;
+    3)
+        postconf -e 'smtpd_tls_security_level = encrypt'
+        postconf -e 'smtpd_tls_cert_file = /certs/mailproxy.pem'
+        postconf -e 'smtpd_tls_key_file = /certs/mailproxy.key'
+        echo "SMTP: STARTTLS required"
+        ;;
+    *)
+        echo "ERROR: unknown SMTP_TLS value '$SMTP_TLS' (expected 1, 2, or 3)" >&2
+        exit 1
+        ;;
+esac
+
 MAPS_DIR=/var/credentials
 
 # Wait up to 90 seconds for the fetcher to generate relay maps.

@@ -46,7 +46,7 @@ ifndef FILE
 	$(error FILE is not set. Usage: make export FILE=backup.tar.gz)
 endif
 	$(MAKE) down
-	tar -czf $(FILE) maildata/ rcdata/ accounts.yml .env
+	tar -czf $(FILE) maildata/ rcdata/ certs/ accounts.yml .env
 	@echo "Exported to $(FILE)"
 	@echo "Start servers again with: make up"
 
@@ -55,8 +55,8 @@ import:
 ifndef FILE
 	$(error FILE is not set. Usage: make import FILE=backup.tar.gz)
 endif
-	@echo "Clearing maildata/ and rcdata/ ..."
-	rm -rf maildata rcdata
+	@echo "Clearing maildata/, rcdata/ and certs/ ..."
+	rm -rf maildata rcdata certs
 	tar -xzf $(FILE)
 	@echo "Imported from $(FILE)"
 	@echo "Start servers with: make up"
