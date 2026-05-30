@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   dovecot:
     build: ./docker/dovecot
