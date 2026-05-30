@@ -5,6 +5,10 @@ mkdir -p /var/log/dovecot /etc/dovecot/conf.d
 touch /var/log/dovecot/dovecot.log
 chmod 644 /var/log/dovecot/dovecot.log
 
+# Ensure maildata is owned by the mail user (uid=1000) so dovecot can access it.
+# This fixes ownership after import under root or other uid mismatch.
+chown -R 1000:1000 /var/mail 2>/dev/null || true
+
 IMAP_TLS=${IMAP_TLS:-1}
 
 # Ensure shared certificate exists (TLS >= 2).
