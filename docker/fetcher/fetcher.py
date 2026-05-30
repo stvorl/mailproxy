@@ -8,6 +8,8 @@ import yaml
 ACCOUNTS_FILE = '/app/accounts.yml'
 MAIL_BASE = '/var/mail'
 CREDS_BASE = '/var/credentials'
+SMPH_DIR = '/smph'
+FETCH_TRIGGER = os.path.join(SMPH_DIR, 'fetch_now')
 
 
 def _write_file(path, content):
@@ -266,6 +268,7 @@ def fetch_pop3(account):
 def main():
     prev_accounts = None
     interval = 15
+    os.makedirs(SMPH_DIR, exist_ok=True)
 
     while True:
         try:
@@ -290,7 +293,18 @@ def main():
         for account in accounts:
             fetch_account(account)
 
-        time.sleep(int(interval) * 60)
+        # Wait for either the interval to elapse or a trigger file to appear.
+        # Poll every 2 seconds so triggered fetches feel responsive.
+        deadline = time.monotonic() + int(interval) * 60
+        while time.monotonic() < deadline:
+            if os.path.exists(FETCH_TRIGGER):
+                try:
+                    os.remove(FETCH_TRIGGER)
+                except OSError:
+                    pass
+                print("Triggered fetch by semaphore", flush=True)
+                break
+            time.sleep(2)
 
 
 if __name__ == '__main__':

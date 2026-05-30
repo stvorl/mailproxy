@@ -36,6 +36,7 @@ services:
       - creds:/var/credentials
       - ./accounts.yml:/app/accounts.yml:ro
       - ./logs/fetcher:/var/log/fetcher
+      - smph:/smph
     depends_on:
       - dovecot
       - postfix
@@ -50,12 +51,14 @@ services:
       - IMAP_TLS=${IMAP_TLS:-1}
       - ROUNDCUBEMAIL_SMTP_SERVER=postfix
       - ROUNDCUBEMAIL_SMTP_PORT=25
-      - ROUNDCUBEMAIL_PLUGINS=archive,zipdownload,fix_identity
+      - ROUNDCUBEMAIL_PLUGINS=archive,zipdownload,fix_identity,fetch_trigger
     volumes:
       - ./logs/roundcube:/var/www/html/logs
       - ./docker/roundcube/plugins/fix_identity:/var/www/html/plugins/fix_identity:ro
+      - ./docker/roundcube/plugins/fetch_trigger:/var/www/html/plugins/fetch_trigger:ro
       - creds:/var/credentials:ro
       - ./rcdata:/var/roundcube/db
+      - smph:/smph
     ports:
       - "${ROUNDCUBE_LISTEN:-127.0.0.1}:${ROUNDCUBE_PORT:-8080}:80"
     depends_on:
@@ -73,3 +76,4 @@ networks:
 
 volumes:
   creds:
+  smph:
