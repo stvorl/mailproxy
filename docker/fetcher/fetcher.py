@@ -1,10 +1,12 @@
 import time
+import re
 import poplib
 import imaplib
 import mailbox
 import os
+import json
 import yaml
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 def log(*args):
     ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
@@ -23,6 +25,64 @@ def _write_file(path, content):
     with open(tmp, 'w') as f:
         f.write(content)
     os.replace(tmp, path)
+
+
+def parse_keep_remote(val):
+    """
+    Parse keep_remote config value.
+    Returns: False (delete immediately), True (keep forever),
+             or timedelta (keep for that duration, then delete).
+
+    Accepted formats:
+      false / 0        — delete from remote immediately after fetching
+      true             — keep on remote indefinitely (never delete)
+      10m              — keep for 10 minutes (lowercase m)
+      12h              — 12 hours
+      30s              — 30 seconds
+      7d / 7D          — 7 days
+      3M               — 3 months (~30 days each, uppercase M)
+    """
+    if isinstance(val, bool):
+        return True if val else False
+    if isinstance(val, int):
+        return False if val == 0 else timedelta(days=val)
+    if isinstance(val, str):
+        s = val.strip()
+        if s.lower() in ('false', 'no', '0'):
+            return False
+        if s.lower() in ('true', 'yes'):
+            return True
+        m = re.fullmatch(r'(\d+)([dDhsmM])', s)
+        if m:
+            n, unit = int(m.group(1)), m.group(2)
+            if n == 0:
+                return False
+            if unit in ('d', 'D'):
+                return timedelta(days=n)
+            if unit == 'M':
+                return timedelta(days=n * 30)
+            if unit == 'h':
+                return timedelta(hours=n)
+            if unit == 'm':
+                return timedelta(minutes=n)
+            if unit == 's':
+                return timedelta(seconds=n)
+    log(f"WARNING: unrecognised keep_remote value {val!r}, treating as keep-forever")
+    return True
+
+
+def load_state(path):
+    """Load fetch state {id: iso_timestamp} from JSON, or return empty dict."""
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_state(path, state):
+    """Persist fetch state atomically."""
+    _write_file(path, json.dumps(state, indent=2))
 
 
 def get_logins(account):
@@ -192,9 +252,13 @@ def fetch_imap(account):
     host = ib['host']
     port = ib.get('port', 993 if ib.get('tls') else 143)
     use_ssl = ib.get('tls', False) and port == 993
-    delete_remote = ib.get('delete_remote', True)
+    keep_for = parse_keep_remote(ib.get('keep_remote', False))
     folders = [f.strip() for f in str(ib.get('folder', 'INBOX')).split(',') if f.strip()]
     label = get_mailbox(account)
+
+    state_file = os.path.join(MAIL_BASE, label, f'.fetch_state_imap_{host}_{port}.json')
+    state = load_state(state_file)
+    now = datetime.now(timezone.utc)
 
     ensure_maildir(account)
     md = mailbox.Maildir(os.path.join(MAIL_BASE, label, 'Maildir'))
@@ -209,26 +273,51 @@ def fetch_imap(account):
 
         conn.login(ib['user'], ib['pass'])
 
-        total = 0
+        fetched = 0
+        deleted = 0
+        seen_keys = set()
+
         for folder in folders:
             conn.select(folder)
-            _, data = conn.search(None, 'ALL')
+            _, data = conn.uid('SEARCH', None, 'ALL')
             uids = data[0].split()
-            for uid in uids:
-                _, msg_data = conn.fetch(uid, '(RFC822)')
-                raw = msg_data[0][1]
-                md.add(raw)
-                if delete_remote:
-                    conn.store(uid, '+FLAGS', '\\Deleted')
-                total += 1
-            if delete_remote:
+
+            for uid_bytes in uids:
+                uid_str = uid_bytes.decode()
+                key = f'{folder}/{uid_str}'
+                seen_keys.add(key)
+
+                if key not in state:
+                    _, msg_data = conn.uid('FETCH', uid_bytes, '(RFC822)')
+                    raw = msg_data[0][1]
+                    md.add(raw)
+                    fetched += 1
+                    if keep_for is False:
+                        conn.uid('STORE', uid_bytes, '+FLAGS', '\\Deleted')
+                        deleted += 1
+                    else:
+                        state[key] = now.isoformat()
+                        seen_keys.add(key)
+                elif isinstance(keep_for, timedelta):
+                    fetch_time = datetime.fromisoformat(state[key])
+                    if (now - fetch_time) >= keep_for:
+                        conn.uid('STORE', uid_bytes, '+FLAGS', '\\Deleted')
+                        del state[key]
+                        seen_keys.discard(key)
+                        deleted += 1
+
+            if keep_for is not True:
                 conn.expunge()
 
         conn.logout()
-        log(f"Fetched {total} message(s) via IMAP for {label}")
+
+        state = {k: v for k, v in state.items() if k in seen_keys}
+        save_state(state_file, state)
+
+        log(f'IMAP {label}: fetched {fetched}, deleted {deleted} from {host}')
 
     except Exception as e:
-        log(f"ERROR fetching IMAP {label} from {host}: {e}")
+        log(f'ERROR fetching IMAP {label} from {host}: {e}')
 
 
 def fetch_account(account):
@@ -244,7 +333,12 @@ def fetch_pop3(account):
     host = ib['host']
     port = ib.get('port', 995 if ib.get('tls') else 110)
     use_ssl = ib.get('tls', False) and port == 995
+    keep_for = parse_keep_remote(ib.get('keep_remote', False))
     label = get_mailbox(account)
+
+    state_file = os.path.join(MAIL_BASE, label, f'.fetch_state_pop3_{host}_{port}.json')
+    state = load_state(state_file)
+    now = datetime.now(timezone.utc)
 
     ensure_maildir(account)
     md = mailbox.Maildir(os.path.join(MAIL_BASE, label, 'Maildir'))
@@ -259,20 +353,48 @@ def fetch_pop3(account):
 
         conn.user(ib['user'])
         conn.pass_(ib['pass'])
-        _, items, _ = conn.list()
 
-        for item in items:
-            num = int(item.decode().split()[0])
-            _, lines, _ = conn.retr(num)
-            md.add(b'\r\n'.join(lines))
-            if ib.get('delete_remote', True):
-                conn.dele(num)
+        # UIDL provides stable per-message IDs that persist across sessions.
+        _, uidl_list, _ = conn.uidl()
+        uidl_map = {}  # msg_num -> uidl string
+        for entry in uidl_list:
+            parts = entry.decode().split(None, 1)
+            uidl_map[int(parts[0])] = parts[1]
+
+        fetched = 0
+        deleted = 0
+        to_delete = []
+
+        for num, uidl in uidl_map.items():
+            if uidl not in state:
+                _, lines, _ = conn.retr(num)
+                md.add(b'\r\n'.join(lines))
+                fetched += 1
+                if keep_for is False:
+                    to_delete.append((num, uidl))
+                else:
+                    state[uidl] = now.isoformat()
+            elif isinstance(keep_for, timedelta):
+                fetch_time = datetime.fromisoformat(state[uidl])
+                if (now - fetch_time) >= keep_for:
+                    to_delete.append((num, uidl))
+
+        for num, uidl in to_delete:
+            conn.dele(num)
+            state.pop(uidl, None)
+            deleted += 1
 
         conn.quit()
-        log(f"Fetched {len(items)} message(s) via POP3 for {label}")
+
+        # Drop state entries for messages no longer present on the server.
+        current_uidls = set(uidl_map.values())
+        state = {k: v for k, v in state.items() if k in current_uidls}
+        save_state(state_file, state)
+
+        log(f'POP3 {label}: fetched {fetched}, deleted {deleted} from {host}')
 
     except Exception as e:
-        log(f"ERROR fetching POP3 {label} from {host}: {e}")
+        log(f'ERROR fetching POP3 {label} from {host}: {e}')
 
 
 def main():

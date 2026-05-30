@@ -18,8 +18,16 @@ accounts:
     #   port: 110, tls: true   — POP3 + STARTTLS (plain connection upgraded to TLS)
     #   port: 110, tls: false  — plain, unencrypted (avoid unless no other option)
     #
-    # delete_remote: true  — delete messages from remote after fetching
-    # delete_remote: false — leave copies on remote (useful for testing)
+    # keep_remote: false — delete from remote immediately after fetching (default)
+    # keep_remote: true  — keep on remote indefinitely, never delete
+    # keep_remote: 10m   — keep for 10 minutes  (m = minutes; useful for testing)
+    # keep_remote: 12h   — keep for 12 hours
+    # keep_remote: 7d    — keep for 7 days  (d or D)
+    # keep_remote: 3M    — keep for 3 months (~30 days each, uppercase M)
+    # keep_remote: 30s   — keep for 30 seconds
+    # Messages are fetched only once regardless of keep_remote value;
+    # a local state file (.fetch_state_*.json in the mailbox directory) tracks
+    # what has already been downloaded.
     inbound:
       host: pop.example.com
       port: 995
@@ -27,10 +35,9 @@ accounts:
       tls: true
       user: alice@example.com
       pass: remote_password_here
-      delete_remote: true
+      keep_remote: false
 
     # Outbound: SMTP relay used by Postfix to send mail from this account.
-    # Each account must have its own relay — there is no shared/global relay.
     #
     # port + tls combinations:
     #   port: 587, tls: true   — submission with STARTTLS (most common)
@@ -102,8 +109,9 @@ accounts:
   # need to fetch from a specific folder other than INBOX.
   #
   # folder: comma-separated list of IMAP folders to fetch from (default: INBOX)
-  # delete_remote: true  — delete messages after fetching (EXPUNGE)
-  # delete_remote: false — leave messages on the server
+  # keep_remote: false — delete messages after fetching (default)
+  # keep_remote: true  — leave messages on the server
+  # (all duration formats also apply, same as for POP3 above)
   #
   # port + tls combinations:
   #   port: 993, tls: true  — IMAPS, implicit SSL
@@ -119,7 +127,7 @@ accounts:
       folder: INBOX               # optional; comma-separated, e.g. "INBOX, SPAM"
       user: charlie@example.com
       pass: remote_password_here
-      delete_remote: true
+      keep_remote: false
 
     outbound:
       host: smtp.example.com

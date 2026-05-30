@@ -52,7 +52,7 @@ accounts:
       tls: true
       user: alice@example.com
       pass: remote_password
-      delete_remote: true
+      keep_remote: false
 
     outbound:                   # relay outgoing mail via this SMTP server
       host: smtp.example.com
