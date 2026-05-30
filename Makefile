@@ -65,6 +65,6 @@ ifndef FILE
 endif
 	@echo "Clearing maildata/, rcdata/ and certs/ ..."
 	rm -rf maildata rcdata certs
-	tar -xzf $(FILE)
+	tar -xzf $(FILE) --no-same-owner
 	@echo "Imported from $(FILE)"
 	@echo "Start servers with: make up"

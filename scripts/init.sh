@@ -33,6 +33,8 @@ else
   fi
 fi
 
+chmod 600 accounts.yml .env 2>/dev/null || true
+
 mkdir -p maildata
 chmod 700 maildata || true
 echo "Ensured maildata/ directory exists with restricted permissions"
