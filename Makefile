@@ -38,7 +38,7 @@ endif
 	for f in certs/mailproxy.pem certs/mailproxy.key; do \
 		[ -r "$$f" ] && CERTS="$$CERTS $$f"; \
 	done; \
-	tar -czf $(FILE) maildata/ rcdata/ accounts.yml .env $$CERTS; \
+	tar -czf $(FILE) logs/ maildata/ rcdata/ accounts.yml .env $$CERTS; \
 	if [ -n "$$CERTS" ]; then \
 		echo "Exported to $(FILE) (including cert files)"; \
 	else \
@@ -51,8 +51,8 @@ import:
 ifndef FILE
 	$(error FILE is not set. Usage: make import FILE=backup.tar.gz)
 endif
-	@echo "Clearing maildata/, rcdata/ and certs/ ..."
-	rm -rf maildata rcdata certs
+	@echo "Clearing logs/ maildata/, rcdata/ and certs/ ..."
+	rm -rf logs maildata rcdata certs
 	tar -xzf $(FILE) --no-same-owner
 	@echo "Imported from $(FILE)"
 	@echo "Start servers with: make up"
@@ -60,7 +60,7 @@ endif
 # make clean — stop services and wipe all private data from this instance
 clean:
 	@echo "WARNING: This will permanently delete all mail, credentials and config."
-	@echo "         maildata/, rcdata/, certs/, accounts.yml, .env will be removed."
+	@echo "         logs/ maildata/, rcdata/, certs/, accounts.yml, .env will be removed."
 	@printf 'Type YES (uppercase) to confirm: '; \
 	read answer; \
 	if [ "$$answer" != "YES" ]; then \
@@ -68,6 +68,6 @@ clean:
 		exit 1; \
 	fi
 	-docker compose $(COMPOSE_FLAGS) down 2>/dev/null || true
-	rm -rf maildata rcdata certs
+	rm -rf logs maildata rcdata certs logs
 	rm -f accounts.yml .env
 	@echo "Done. Run 'make init' to start fresh."
