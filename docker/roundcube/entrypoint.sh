@@ -59,4 +59,9 @@ fi
 CONFIG=/var/www/html/config/config.inc.php
 echo '$config["log_driver"] = "file";' >> "$CONFIG"
 
+# Ensure container-owned directories have correct permissions.
+# /var/www/html/logs may be a bind mount owned by host root after import.
+mkdir -p /var/www/html/logs /var/roundcube/db
+chown -R www-data:www-data /var/www/html/logs /var/roundcube/db
+
 exec apache2-foreground

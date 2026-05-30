@@ -19,9 +19,6 @@ rebuild:
 
 up: build
 	docker compose $(COMPOSE_FLAGS) up -d --remove-orphans
-ifeq ($(ENABLE_ROUNDCUBE),true)
-	docker exec mailproxy-roundcube-1 chown -R www-data:www-data /var/roundcube/db /var/www/html/logs
-endif
 
 down:
 	docker compose $(COMPOSE_FLAGS) down
