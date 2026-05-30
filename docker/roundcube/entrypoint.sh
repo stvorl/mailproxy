@@ -41,4 +41,9 @@ if [ "$IMAP_TLS" -ge 2 ]; then
     fi
 fi
 
+# Override log_driver to write logs to bind-mounted ./logs/roundcube/.
+# Appending works because PHP uses the last assignment.
+CONFIG=/var/www/html/config/config.inc.php
+echo '$config["log_driver"] = "file";' >> "$CONFIG"
+
 exec apache2-foreground
