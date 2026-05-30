@@ -1,0 +1,3 @@
+# Strip client IP and hostname from outbound Received headers.
+# Keeps "by local-mailproxy (Postfix) ..." but removes "from [IP] (hostname [IP])".
+/^Received:.*by local-mailproxy.*/    IGNORE

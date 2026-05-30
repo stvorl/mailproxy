@@ -32,6 +32,9 @@ smtp_tls_security_level = may
 smtp_tls_policy_maps = hash:/etc/postfix/tls_policy
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 
+# Strip internal IP/hostname from outbound Received headers
+smtp_header_checks = pcre:/etc/postfix/smtp_header_checks
+
 compatibility_level = 2
 
 # Log to file instead of syslog (Docker-friendly, Postfix 3.4+)
