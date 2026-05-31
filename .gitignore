@@ -1,31 +1,19 @@
-# Ignore local secrets and runtime data
+.github
+
+# Ignore local secrets and configs
 .env
 accounts.yml
 accounts.yml.backup
+
+# possible backups made into deployment folder
+*.tgz
+*.tar.gz
 
 # Mail storage and runtime
 maildata/
 rcdata/
 certs/
-*.db
-
-# Docker compose overrides
-docker-compose.override.yml
-
-# Editor/IDE
-.vscode/
-.idea/
-
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-
-# Logs
 logs/
-*.log
 
-# OS
-.DS_Store
-thumbs.db
-.github
+# Docker compose
+docker-compose.override.yml
