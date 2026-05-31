@@ -243,6 +243,11 @@ def write_postfix_maps(accounts):
     )
 
 
+def get_fetch_interval(account, default_interval):
+    """Return fetch interval in minutes for this account, or the global default."""
+    return int(account.get('inbound', {}).get('fetch_interval', default_interval))
+
+
 def get_mailbox(account):
     """Return the mailbox storage name (directory under MAIL_BASE)."""
     local = account.get('local', {})
@@ -408,7 +413,8 @@ def fetch_pop3(account):
 
 def main():
     prev_accounts = None
-    interval = 15
+    default_interval = 15
+    last_fetched = {}  # mailbox key -> monotonic timestamp
     os.makedirs(SMPH_DIR, exist_ok=True)
     os.chmod(SMPH_DIR, 0o1777)  # world-writable + sticky, like /tmp
 
@@ -422,7 +428,7 @@ def main():
             continue
 
         accounts = cfg.get('accounts', [])
-        interval = cfg.get('global', {}).get('default_fetch_interval', interval)
+        default_interval = cfg.get('global', {}).get('default_fetch_interval', default_interval)
 
         if accounts != prev_accounts:
             os.makedirs(CREDS_BASE, exist_ok=True)
@@ -432,21 +438,25 @@ def main():
             prev_accounts = accounts
             log("Config reloaded: updated Dovecot passwd, Postfix maps, alias_map")
 
-        for account in accounts:
-            fetch_account(account)
+        triggered = False
+        if os.path.exists(FETCH_TRIGGER):
+            try:
+                os.remove(FETCH_TRIGGER)
+            except OSError:
+                pass
+            log("Triggered fetch by semaphore")
+            triggered = True
 
-        # Wait for either the interval to elapse or a trigger file to appear.
-        # Poll every 2 seconds so triggered fetches feel responsive.
-        deadline = time.monotonic() + int(interval) * 60
-        while time.monotonic() < deadline:
-            if os.path.exists(FETCH_TRIGGER):
-                try:
-                    os.remove(FETCH_TRIGGER)
-                except OSError:
-                    pass
-                log("Triggered fetch by semaphore")
-                break
-            time.sleep(2)
+        now = time.monotonic()
+        for account in accounts:
+            key = get_mailbox(account) or account.get('address', '')
+            interval_sec = get_fetch_interval(account, default_interval) * 60
+            due = triggered or (key not in last_fetched) or (now - last_fetched[key] >= interval_sec)
+            if due:
+                fetch_account(account)
+                last_fetched[key] = time.monotonic()
+
+        time.sleep(2)
 
 
 if __name__ == '__main__':

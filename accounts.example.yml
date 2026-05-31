@@ -36,6 +36,7 @@ accounts:
       user: alice@example.com
       pass: remote_password_here
       keep_remote: false
+      # fetch_interval: 10  # optional: poll this account every 10 min (overrides default_fetch_interval)
 
     # Outbound: SMTP relay used by Postfix to send mail from this account.
     #
@@ -59,7 +60,6 @@ accounts:
     local:
       user: alice@example.com
       password: local_imap_password
-      # fetch_interval: 10  # optional per-account override in minutes
 
   # -------------------------------------------------------------------------
   # Account 2: STARTTLS inbound (port 110), outbound with required TLS
