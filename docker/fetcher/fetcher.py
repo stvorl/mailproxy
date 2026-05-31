@@ -192,14 +192,16 @@ def write_alias_map(accounts):
 
 def write_postfix_maps(accounts):
     """
-    Generate three Postfix lookup tables in MAIL_BASE:
+    Generate four Postfix lookup tables in CREDS_BASE:
       sender_relay  — local sender address  ->  [relay]:port
       sasl_passwd   — [relay]:port           ->  username:password
       tls_policy    — [relay]:port           ->  encrypt | may
+      sender_access — local sender address  ->  OK  (access control)
     """
     sender_relay_lines = []
     sasl_map = {}   # relay -> 'user:pass'
     tls_map = {}    # relay -> 'encrypt' | 'may'
+    allowed_senders = []  # senders with a valid outbound relay
 
     for a in accounts:
         local = a.get('local', {})
@@ -214,13 +216,14 @@ def write_postfix_maps(accounts):
         use_tls = ob.get('tls', True)  # default: require TLS
 
         if not (host and user and passwd):
-            log(f"WARNING: {sender} is missing outbound host/user/pass — skipping")
+            log(f"WARNING: {sender} has no outbound relay — SMTP sending will be rejected")
             continue
 
         relay = f"[{host}]:{port}"
         sender_relay_lines.append(f"{sender} {relay}")
         sasl_map[relay] = f"{user}:{passwd}"
         tls_map[relay] = 'encrypt' if use_tls else 'may'
+        allowed_senders.append(sender)
 
     _write_file(
         os.path.join(CREDS_BASE, 'sender_relay'),
@@ -233,6 +236,10 @@ def write_postfix_maps(accounts):
     _write_file(
         os.path.join(CREDS_BASE, 'tls_policy'),
         ''.join(f"{relay} {policy}\n" for relay, policy in tls_map.items()),
+    )
+    _write_file(
+        os.path.join(CREDS_BASE, 'sender_access'),
+        ''.join(f"{s} OK\n" for s in allowed_senders),
     )
 
 
@@ -321,6 +328,8 @@ def fetch_imap(account):
 
 
 def fetch_account(account):
+    if 'inbound' not in account:
+        return  # local-only account, no remote fetching
     proto = account['inbound'].get('proto', 'pop3').lower()
     if proto == 'imap':
         fetch_imap(account)

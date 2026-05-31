@@ -16,6 +16,10 @@ smtpd_sasl_security_options = noanonymous
 # Allow both: local Docker network (no auth) and SASL-authenticated clients
 smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
 
+# Only allow sending from addresses that have a configured outbound relay.
+# Senders not in sender_access are rejected at MAIL FROM time.
+smtpd_sender_restrictions = check_sender_access hash:/etc/postfix/sender_access, reject
+
 # Outgoing SASL auth to remote relay servers
 smtp_sasl_auth_enable = yes
 smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd

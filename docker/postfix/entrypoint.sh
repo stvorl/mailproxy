@@ -72,7 +72,7 @@ if [ ! -f "$MAPS_DIR/sasl_passwd" ]; then
 fi
 
 # Load whichever maps are present
-for map in sasl_passwd sender_relay tls_policy; do
+for map in sasl_passwd sender_relay tls_policy sender_access; do
   if [ -f "$MAPS_DIR/$map" ]; then
     cp "$MAPS_DIR/$map" "/etc/postfix/$map"
     postmap "/etc/postfix/$map"
