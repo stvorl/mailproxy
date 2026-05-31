@@ -73,8 +73,7 @@ accounts:
       tls: true
       user: bob@example.org
       pass: remote_password_here
-      delete_remote: false
-
+      keep_remote: false      # fetch_interval: 30  # optional per-account override in minutes
     outbound:
       host: smtp.other.net
       port: 587
