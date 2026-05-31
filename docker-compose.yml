@@ -61,7 +61,7 @@ services:
       - ./rcdata:/var/roundcube/db
       - smph:/smph
     ports:
-      - "${ROUNDCUBE_LISTEN:-127.0.0.1}:${ROUNDCUBE_PORT:-8080}:80"
+      - "${ROUNDCUBE_LISTEN:-0.0.0.0}:${ROUNDCUBE_PORT:-8080}:80"
     depends_on:
       - dovecot
       - postfix
