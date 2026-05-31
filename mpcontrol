@@ -64,25 +64,12 @@ cmd_init() {
     mkdir -p certs
     echo "Ensured certs/ exists"
 
-    # Sanity check: every account should have an outbound section
-    if [ -f accounts.yml ]; then
-        num_accounts=$(grep -cE '^\s*address:' accounts.yml || true)
-        num_outbound=$(grep -cE '^\s*outbound:' accounts.yml || true)
-        if [ "$num_accounts" -gt 0 ] && [ "$num_outbound" -lt "$num_accounts" ]; then
-            echo
-            echo "WARNING: accounts.yml has $num_accounts account(s) but only $num_outbound outbound entries."
-            echo "Each account must include an 'outbound' block. See accounts.example.yml."
-        fi
-    fi
-
     echo
     echo "Next steps:"
     echo "  1) Edit accounts.yml with your credentials"
     echo "  2) Edit .env if needed (e.g. set ENABLE_ROUNDCUBE=true)"
     echo "  3) Run: ./mpcontrol up"
     echo "  4) Follow logs: ./mpcontrol logs"
-    echo
-    echo "Tip: keep accounts.yml and .env out of version control (they are in .gitignore)"
 }
 
 cmd_build() {
