@@ -177,6 +177,25 @@ When `logins:` is present, signing in as `bob` or `carol` is automatically redir
 
 Messages are downloaded **only once** regardless of `keep_remote`. Fetch state is tracked in `.fetch_state_*.json` files in the mailbox directory.
 
+### fetch_depth — limit how far back IMAP fetcher searches (IMAP only)
+
+When `keep_remote: true` and the remote mailbox holds thousands of old messages, every poll cycle asks the server to list them all. `fetch_depth` tells the fetcher to issue `SEARCH SINCE <date>` instead of `SEARCH ALL`, drastically reducing the UID list returned.
+
+```yaml
+    inbound:
+      proto: imap
+      keep_remote: true
+      fetch_depth: 30d   # only consider messages from the last 30 days
+```
+
+Accepts the same suffixes as `keep_remote`: `30d`, `3M`, `12h`, etc. Default: unlimited.
+
+**Interaction with `keep_remote` timedelta:** if `keep_remote` is also a duration, the effective search depth is automatically extended to `keep_remote + 10 × fetch_interval`. This ensures messages near their expiry deadline remain visible to the fetcher long enough to be deleted. A log line is emitted when the adjustment occurs.
+
+**Interaction with `keep_remote: false`:** only messages within `fetch_depth` are fetched, stored, and deleted from the remote server. Messages older than `fetch_depth` are neither fetched nor deleted.
+
+`fetch_depth` has no effect for POP3 — the protocol always returns a full message list, which may slow down new mail retrieval on mailboxes with a large number of undeleted messages. In this case, prefer IMAP fetching and configure `fetch_depth`.
+
 ### IMAP source
 
 If the provider does not support POP3, or you need to fetch from a specific folder, use `proto: imap`:

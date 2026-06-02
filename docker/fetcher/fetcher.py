@@ -7,6 +7,8 @@ import os
 import json
 import yaml
 from datetime import datetime, timedelta, timezone
+from email import message_from_bytes
+from email.utils import parsedate_to_datetime
 
 def log(*args):
     ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
@@ -25,6 +27,56 @@ def _write_file(path, content):
     with open(tmp, 'w') as f:
         f.write(content)
     os.replace(tmp, path)
+
+
+def _message_before_cutoff(raw, cutoff):
+    """
+    Return True if the message's Date header is strictly before cutoff.
+    Used for sub-day filtering when fetch_depth is finer than one calendar day.
+    Returns False on any parse error so messages are not silently dropped.
+    """
+    try:
+        msg = message_from_bytes(raw)
+        date_str = msg.get('Date')
+        if not date_str:
+            return False
+        msg_dt = parsedate_to_datetime(date_str)
+        if msg_dt.tzinfo is None:
+            msg_dt = msg_dt.replace(tzinfo=timezone.utc)
+        return msg_dt < cutoff
+    except Exception:
+        return False  # on parse error, keep the message
+
+
+def _parse_duration_str(s):
+    """
+    Parse a duration string with a unit suffix into a timedelta.
+    Returns timedelta on success, or None if the string is not a valid duration.
+
+    Accepted formats: 10m, 12h, 30s, 7d, 7D, 3M
+      s — seconds
+      m — minutes
+      h — hours
+      d / D — days
+      M — months (~30 days each)
+    """
+    m = re.fullmatch(r'(\d+)([dDhsmM])', s.strip())
+    if not m:
+        return None
+    n, unit = int(m.group(1)), m.group(2)
+    if n == 0:
+        return None
+    if unit in ('d', 'D'):
+        return timedelta(days=n)
+    if unit == 'M':
+        return timedelta(days=n * 30)
+    if unit == 'h':
+        return timedelta(hours=n)
+    if unit == 'm':
+        return timedelta(minutes=n)
+    if unit == 's':
+        return timedelta(seconds=n)
+    return None  # unreachable, but satisfies linters
 
 
 def parse_keep_remote(val):
@@ -52,21 +104,9 @@ def parse_keep_remote(val):
             return False
         if s.lower() in ('true', 'yes'):
             return True
-        m = re.fullmatch(r'(\d+)([dDhsmM])', s)
-        if m:
-            n, unit = int(m.group(1)), m.group(2)
-            if n == 0:
-                return False
-            if unit in ('d', 'D'):
-                return timedelta(days=n)
-            if unit == 'M':
-                return timedelta(days=n * 30)
-            if unit == 'h':
-                return timedelta(hours=n)
-            if unit == 'm':
-                return timedelta(minutes=n)
-            if unit == 's':
-                return timedelta(seconds=n)
+        td = _parse_duration_str(s)
+        if td is not None:
+            return td
     log(f"WARNING: unrecognised keep_remote value {val!r}, treating as keep-forever")
     return True
 
@@ -248,6 +288,55 @@ def get_fetch_interval(account, default_interval):
     return int(account.get('inbound', {}).get('fetch_interval', default_interval))
 
 
+def parse_fetch_depth(val):
+    """
+    Parse fetch_depth config value.
+    Returns timedelta (how far back to search) or None (unlimited, SEARCH ALL).
+
+    Accepted formats: same suffixes as keep_remote (s, m, h, d/D, M).
+    Absent / 0 / false / true all mean unlimited.
+    """
+    if val is None or isinstance(val, bool) or val == 0:
+        return None
+    if isinstance(val, int):
+        return timedelta(days=val)
+    if isinstance(val, str):
+        s = val.strip()
+        if s.lower() in ('', 'true', 'false', 'no', '0'):
+            return None
+        td = _parse_duration_str(s)
+        if td is not None:
+            return td
+    log(f"WARNING: unrecognised fetch_depth value {val!r}, treating as unlimited")
+    return None
+
+
+def compute_imap_search_since(fetch_depth, keep_for, fetch_interval_min, label):
+    """
+    Return the SEARCH SINCE cutoff datetime, or None for SEARCH ALL.
+
+    When keep_for is a timedelta the effective search window must be at least
+    keep_for + 10 * fetch_interval so that messages approaching expiry are
+    still visible between poll cycles and get properly deleted.
+    fetch_depth: true/false do not require any adjustment.
+    """
+    if isinstance(keep_for, timedelta):
+        buffer = timedelta(minutes=fetch_interval_min * 10)
+        min_required = keep_for + buffer
+        if fetch_depth is None:
+            return None  # unlimited always satisfies min_required
+        if fetch_depth < min_required:
+            log(f"INFO {label}: fetch_depth extended from {fetch_depth} to "
+                f"{min_required} to cover keep_remote expiry window")
+            return datetime.now(timezone.utc) - min_required
+        return datetime.now(timezone.utc) - fetch_depth
+
+    # keep_for is False or True — no adjustment
+    if fetch_depth is None:
+        return None
+    return datetime.now(timezone.utc) - fetch_depth
+
+
 def get_mailbox(account):
     """Return the mailbox storage name (directory under MAIL_BASE)."""
     local = account.get('local', {})
@@ -261,14 +350,17 @@ def ensure_maildir(account):
     mailbox.Maildir(path, create=True)
 
 
-def fetch_imap(account):
+def fetch_imap(account, fetch_interval_min):
     ib = account['inbound']
     host = ib['host']
     port = ib.get('port', 993 if ib.get('tls') else 143)
     use_ssl = ib.get('tls', False) and port == 993
     keep_for = parse_keep_remote(ib.get('keep_remote', False))
+    fetch_depth = parse_fetch_depth(ib.get('fetch_depth'))
     folders = [f.strip() for f in str(ib.get('folder', 'INBOX')).split(',') if f.strip()]
     label = get_mailbox(account)
+
+    search_since = compute_imap_search_since(fetch_depth, keep_for, fetch_interval_min, label)
 
     state_file = os.path.join(MAIL_BASE, label, f'.fetch_state_imap_{host}_{port}.json')
     state = load_state(state_file)
@@ -293,7 +385,20 @@ def fetch_imap(account):
 
         for folder in folders:
             conn.select(folder)
-            _, data = conn.uid('SEARCH', None, 'ALL')
+            if search_since is not None:
+                # Subtract 1 extra calendar day before formatting the SINCE date.
+                # IMAP SEARCH SINCE uses the server's internal message date, which
+                # is stored in the server's local timezone. A server west of UTC
+                # will record messages arriving in the first hours of a UTC day
+                # with an internal date of "yesterday". Without this buffer those
+                # messages would never match a SINCE query for "today". The extra
+                # day yields at most one additional day's worth of header-only
+                # fetches; the sub-day filter discards anything outside the exact
+                # cutoff window cheaply.
+                date_str = (search_since - timedelta(days=1)).strftime('%d-%b-%Y')
+                _, data = conn.uid('SEARCH', None, 'SINCE', date_str)
+            else:
+                _, data = conn.uid('SEARCH', None, 'ALL')
             uids = data[0].split()
 
             for uid_bytes in uids:
@@ -302,6 +407,15 @@ def fetch_imap(account):
                 seen_keys.add(key)
 
                 if key not in state:
+                    # Sub-day filtering: IMAP SEARCH SINCE has day granularity only.
+                    # Fetch just the Date header first to avoid downloading the full
+                    # body for messages that fall outside the exact cutoff window.
+                    if search_since is not None:
+                        _, hdr_data = conn.uid('FETCH', uid_bytes,
+                                               '(BODY.PEEK[HEADER.FIELDS (DATE)])')
+                        hdr_raw = hdr_data[0][1]
+                        if _message_before_cutoff(hdr_raw, search_since):
+                            continue  # too old; skip body download entirely
                     _, msg_data = conn.uid('FETCH', uid_bytes, '(RFC822)')
                     raw = msg_data[0][1]
                     md.add(raw)
@@ -334,12 +448,12 @@ def fetch_imap(account):
         log(f'ERROR fetching IMAP {label} from {host}: {e}')
 
 
-def fetch_account(account):
+def fetch_account(account, fetch_interval_min):
     if 'inbound' not in account:
         return  # local-only account, no remote fetching
     proto = account['inbound'].get('proto', 'pop3').lower()
     if proto == 'imap':
-        fetch_imap(account)
+        fetch_imap(account, fetch_interval_min)
     else:
         fetch_pop3(account)
 
@@ -452,10 +566,10 @@ def main():
         now = time.monotonic()
         for account in accounts:
             key = get_mailbox(account) or account.get('address', '')
-            interval_sec = get_fetch_interval(account, default_interval) * 60
-            due = triggered or (key not in last_fetched) or (now - last_fetched[key] >= interval_sec)
+            interval_min = get_fetch_interval(account, default_interval)
+            due = triggered or (key not in last_fetched) or (now - last_fetched[key] >= interval_min * 60)
             if due:
-                fetch_account(account)
+                fetch_account(account, interval_min)
                 last_fetched[key] = time.monotonic()
 
         time.sleep(2)

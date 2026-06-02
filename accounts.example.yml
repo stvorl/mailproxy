@@ -112,6 +112,15 @@ accounts:
   # keep_remote: true  — leave messages on the server
   # (all duration formats also apply, same as for POP3 above)
   #
+  # fetch_depth: how far back IMAP SEARCH SINCE reaches (IMAP only).
+  #   Default: unlimited (fetch everything not yet in state).
+  #   Useful when keep_remote: true and the remote mailbox has thousands of
+  #   old messages — limits the UID list the server returns each cycle.
+  #   Same suffixes as keep_remote: 30d, 3M, 6h, etc.
+  #   When keep_remote is a duration, the effective depth is automatically
+  #   extended to keep_remote + 10×fetch_interval so expiring messages are
+  #   never dropped from search before they can be deleted.
+  #
   # port + tls combinations:
   #   port: 993, tls: true  — IMAPS, implicit SSL
   #   port: 143, tls: true  — IMAP + STARTTLS
@@ -127,6 +136,7 @@ accounts:
       user: charlie@example.com
       pass: remote_password_here
       keep_remote: false
+      # fetch_depth: 30d          # optional: only search last 30 days (IMAP only)
 
     outbound:
       host: smtp.example.com
