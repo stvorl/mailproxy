@@ -373,9 +373,18 @@ def get_mailbox(account):
 
 def ensure_maildir(account):
     mailbox_root = os.path.join(MAIL_BASE, get_mailbox(account))
+    created = not os.path.exists(mailbox_root)
     os.makedirs(mailbox_root, exist_ok=True)
     path = os.path.join(mailbox_root, 'Maildir')
     mailbox.Maildir(path, create=True)
+    if created:
+        # Fetcher runs as root; Dovecot expects uid=gid=1000.
+        # chown the freshly created tree so Dovecot can access it immediately
+        # without waiting for its own entrypoint chown on the next restart.
+        for dirpath, dirnames, filenames in os.walk(mailbox_root):
+            os.chown(dirpath, 1000, 1000)
+            for fname in filenames:
+                os.chown(os.path.join(dirpath, fname), 1000, 1000)
 
 
 def fetch_imap(account, fetch_interval_min):
