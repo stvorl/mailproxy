@@ -206,7 +206,7 @@ If the provider does not support POP3, or you need to fetch from a specific fold
       port: 993
       proto: imap
       tls: true
-      folder: INBOX               # optional; comma-separated: "INBOX, Spam"
+      folder: INBOX               # optional; defaults to INBOX; comma-separated: "INBOX, Spam"
       user: charlie@example.com
       pass: remote_password
       keep_remote: 5d             # delete after 5 days

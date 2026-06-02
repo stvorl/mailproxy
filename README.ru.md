@@ -207,7 +207,7 @@ accounts:
       port: 993
       proto: imap
       tls: true
-      folder: INBOX               # опционально; через запятую, например "INBOX, SPAM"
+      folder: INBOX               # опционально; по умолчанию INBOX; через запятую, например "INBOX, SPAM"
       user: charlie@example.com
       pass: remote_password
       keep_remote: 5d             # удалять через 5 дней
