@@ -450,7 +450,12 @@ def fetch_imap(account, fetch_interval_min):
         seen_keys = set()
 
         for folder in folders:
-            conn.select(_encode_imap_folder(folder))
+            encoded_folder = _encode_imap_folder(folder)
+            sel_status, sel_data = conn.select(encoded_folder)
+            if sel_status != 'OK':
+                log(f"WARNING IMAP {label}: cannot select folder {folder!r} "
+                    f"({encoded_folder!r}) on {host}: {sel_data}")
+                continue
             if search_since is not None:
                 # Subtract 1 extra calendar day before formatting the SINCE date.
                 # IMAP SEARCH SINCE uses the server's internal message date, which
@@ -462,9 +467,13 @@ def fetch_imap(account, fetch_interval_min):
                 # fetches; the sub-day filter discards anything outside the exact
                 # cutoff window cheaply.
                 date_str = (search_since - timedelta(days=1)).strftime('%d-%b-%Y')
-                _, data = conn.uid('SEARCH', None, 'SINCE', date_str)
+                search_status, data = conn.uid('SEARCH', None, 'SINCE', date_str)
             else:
-                _, data = conn.uid('SEARCH', None, 'ALL')
+                search_status, data = conn.uid('SEARCH', None, 'ALL')
+            if search_status != 'OK' or not data or data[0] is None:
+                log(f"WARNING IMAP {label}: SEARCH failed in folder {folder!r} "
+                    f"on {host}: {data}")
+                continue
             uids = data[0].split()
 
             for uid_bytes in uids:
