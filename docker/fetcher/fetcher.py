@@ -38,6 +38,35 @@ def _as_td_approx(d):
         return timedelta(days=d.months * 30)
     return d
 
+
+def _encode_imap_folder(name):
+    """
+    Encode a folder name to IMAP Modified UTF-7 (RFC 3501 §5.1.3).
+    ASCII printable characters (except '&') pass through unchanged.
+    Non-ASCII sequences are base64-encoded and wrapped in &...-.  
+    """
+    import base64
+    res = []
+    buf = []
+
+    def flush():
+        if buf:
+            b64 = base64.b64encode(''.join(buf).encode('utf-16-be')).decode('ascii')
+            res.append('&' + b64.rstrip('=') + '-')
+            buf.clear()
+
+    for ch in name:
+        if ch == '&':
+            flush()
+            res.append('&-')
+        elif 0x20 <= ord(ch) <= 0x7e:
+            flush()
+            res.append(ch)
+        else:
+            buf.append(ch)
+    flush()
+    return ''.join(res)
+
 def log(*args):
     ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
     print(ts, *args, flush=True)
@@ -421,7 +450,7 @@ def fetch_imap(account, fetch_interval_min):
         seen_keys = set()
 
         for folder in folders:
-            conn.select(folder)
+            conn.select(_encode_imap_folder(folder))
             if search_since is not None:
                 # Subtract 1 extra calendar day before formatting the SINCE date.
                 # IMAP SEARCH SINCE uses the server's internal message date, which
