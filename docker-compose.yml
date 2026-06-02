@@ -3,6 +3,7 @@ services:
     build: ./docker/dovecot
     environment:
       - IMAP_TLS=${IMAP_TLS:-1}
+      - DOVECOT_FTS=${DOVECOT_FTS:-false}
     volumes:
       - ./maildata:/var/mail
       - creds:/var/credentials:ro

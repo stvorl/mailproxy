@@ -10,6 +10,21 @@ chmod 644 /var/log/dovecot/dovecot.log
 chown -R 1000:1000 /var/mail 2>/dev/null || true
 
 IMAP_TLS=${IMAP_TLS:-1}
+DOVECOT_FTS=${DOVECOT_FTS:-false}
+fts_raw=$(printf '%s' "$DOVECOT_FTS" | tr '[:upper:]' '[:lower:]')
+
+case "$fts_raw" in
+    true|1|yes|on)
+        fts_enabled=true
+        ;;
+    false|0|no|off|'')
+        fts_enabled=false
+        ;;
+    *)
+        echo "ERROR: unknown DOVECOT_FTS value '$DOVECOT_FTS' (expected true/false)" >&2
+        exit 1
+        ;;
+esac
 
 # Ensure shared certificate exists (TLS >= 2).
 # Uses mkdir as an atomic lock to prevent two containers generating simultaneously.
@@ -66,5 +81,20 @@ EOF
         exit 1
         ;;
 esac
+
+# Write FTS config snippet (enabled/disabled by DOVECOT_FTS).
+if [ "$fts_enabled" = "true" ]; then
+        cat > /etc/dovecot/conf.d/fts.conf <<'EOF'
+mail_plugins = fts fts_xapian
+fts_driver = xapian
+fts_autoindex = yes
+EOF
+        echo "IMAP FTS: enabled (xapian)"
+else
+        cat > /etc/dovecot/conf.d/fts.conf <<'EOF'
+# DOVECOT_FTS is disabled.
+EOF
+        echo "IMAP FTS: disabled"
+fi
 
 exec dovecot -F

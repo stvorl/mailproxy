@@ -277,6 +277,19 @@ IMAPS_PORT=993
 IMAP_TLS=3
 ```
 
+Optional full-text search acceleration (Dovecot FTS / xapian):
+
+```sh
+# true = enable FTS index/search acceleration, false = disable
+# default: false
+DOVECOT_FTS=false
+```
+
+Notes:
+
+- The image already contains the required FTS plugin; switching `DOVECOT_FTS` only needs `./mpcontrol restart` (no rebuild).
+- When enabling FTS on an existing deployment, indexing is built over time as mailboxes are accessed.
+
 ### SMTP server (Postfix)
 
 Outbound mail proxy that forwards messages to the real SMTP servers.
