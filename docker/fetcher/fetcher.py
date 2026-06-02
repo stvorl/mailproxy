@@ -43,7 +43,8 @@ def _encode_imap_folder(name):
     """
     Encode a folder name to IMAP Modified UTF-7 (RFC 3501 §5.1.3).
     ASCII printable characters (except '&') pass through unchanged.
-    Non-ASCII sequences are base64-encoded and wrapped in &...-.  
+    Non-ASCII sequences are base64-encoded (with '/' replaced by ',')
+    and wrapped in &...-.  
     """
     import base64
     res = []
@@ -52,6 +53,8 @@ def _encode_imap_folder(name):
     def flush():
         if buf:
             b64 = base64.b64encode(''.join(buf).encode('utf-16-be')).decode('ascii')
+            # IMAP modified UTF-7 uses ',' instead of '/'.
+            b64 = b64.replace('/', ',')
             res.append('&' + b64.rstrip('=') + '-')
             buf.clear()
 
@@ -66,6 +69,211 @@ def _encode_imap_folder(name):
             buf.append(ch)
     flush()
     return ''.join(res)
+
+
+def _decode_imap_folder(name):
+    """Decode IMAP Modified UTF-7 folder name to Unicode for logs/files."""
+    import base64
+    out = []
+    i = 0
+    n = len(name)
+    while i < n:
+        ch = name[i]
+        if ch != '&':
+            out.append(ch)
+            i += 1
+            continue
+
+        j = name.find('-', i)
+        if j == -1:
+            out.append(name[i:])
+            break
+
+        chunk = name[i + 1:j]
+        if chunk == '':
+            out.append('&')  # "&-"
+        else:
+            b64 = chunk.replace(',', '/')
+            pad = '=' * ((4 - len(b64) % 4) % 4)
+            try:
+                raw = base64.b64decode(b64 + pad)
+                out.append(raw.decode('utf-16-be'))
+            except Exception:
+                out.append(name[i:j + 1])
+        i = j + 1
+
+    return ''.join(out)
+
+
+def _parse_imap_list_entry(row):
+    """Parse one IMAP LIST row into (flags_list, encoded_folder_name)."""
+    line = row.decode(errors='replace')
+    m = re.match(r'^\((?P<flags>[^)]*)\)\s+"[^"]*"\s+(?P<name>.+)$', line)
+    if not m:
+        return None
+
+    flags_raw = m.group('flags').strip()
+    flags = flags_raw.split() if flags_raw else []
+    name = m.group('name').strip()
+    if name.startswith('"') and name.endswith('"') and len(name) >= 2:
+        name = name[1:-1]
+    return flags, name
+
+
+def _list_imap_folders(conn):
+    """Return parsed LIST entries as [{'flags': [...], 'name': '...'}]."""
+    typ, data = conn.list()
+    if typ != 'OK' or not data:
+        return []
+
+    entries = []
+    for row in data:
+        parsed = _parse_imap_list_entry(row)
+        if not parsed:
+            continue
+        flags, name = parsed
+        entries.append({'flags': flags, 'name': name})
+    return entries
+
+
+def _update_imap_folders_file(conn, label):
+    """
+    Write /var/mail/<mailbox>/imap_folders.txt with two columns:
+      1) full remote folder path (decoded to Unicode)
+      2) folder flags from LIST
+    """
+    entries = _list_imap_folders(conn)
+    out_path = os.path.join(MAIL_BASE, label, 'imap_folders.txt')
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    rows = []
+    for e in entries:
+        full_path = _decode_imap_folder(e['name'])
+        flags_col = ' '.join(e['flags']) if e['flags'] else '-'
+        rows.append((full_path, flags_col))
+
+    rows.sort(key=lambda x: x[0].lower())
+
+    lines = ['folder\tflags']
+    lines.extend(f"{path}\t{flags}" for path, flags in rows)
+    _write_file(out_path, '\n'.join(lines) + '\n')
+    try:
+        os.chown(out_path, 1000, 1000)
+    except OSError:
+        pass
+
+
+def _parse_imap_folder_mappings(val):
+    """
+    Parse inbound.folder into a list of (remote_folder, local_folder) pairs.
+
+    Supported entry formats (comma-separated):
+      REMOTE            -> local defaults to INBOX
+      REMOTE>LOCAL      -> explicit local mapping
+
+    Backward compatibility:
+      "INBOX, News" is interpreted as "INBOX>INBOX, News>INBOX".
+    """
+    spec = 'INBOX' if val is None else str(val)
+    pairs = []
+
+    for raw_part in spec.split(','):
+        part = raw_part.strip()
+        if not part:
+            continue
+
+        if '>' in part:
+            remote, local = part.split('>', 1)
+            remote = remote.strip()
+            local = local.strip() or 'INBOX'
+        else:
+            remote = part
+            local = 'INBOX'
+
+        if not remote:
+            log(f"WARNING: skipping malformed folder mapping entry {raw_part!r}")
+            continue
+        pairs.append((remote, local))
+
+    if not pairs:
+        return [('INBOX', 'INBOX')]
+
+    # Keep first occurrence order; ignore duplicate remote folders.
+    seen_remote = set()
+    result = []
+    for remote, local in pairs:
+        if remote in seen_remote:
+            log(f"WARNING: duplicate remote folder mapping for {remote!r}; using first entry")
+            continue
+        seen_remote.add(remote)
+        result.append((remote, local))
+    return result
+
+
+def _chown_tree(path, uid=1000, gid=1000):
+    """Best-effort recursive chown for paths created by fetcher running as root."""
+    try:
+        os.chown(path, uid, gid)
+    except OSError:
+        return
+    for dirpath, _dirnames, filenames in os.walk(path):
+        try:
+            os.chown(dirpath, uid, gid)
+        except OSError:
+            pass
+        for fname in filenames:
+            try:
+                os.chown(os.path.join(dirpath, fname), uid, gid)
+            except OSError:
+                pass
+
+
+def _append_subscription(md, folder_name):
+    """Ensure folder is listed in Maildir subscriptions file."""
+    subs_path = os.path.join(md._path, 'subscriptions')
+    line = f'{folder_name}\n'
+    try:
+        with open(subs_path, 'r', encoding='utf-8') as f:
+            existing = f.readlines()
+    except FileNotFoundError:
+        existing = []
+    if line not in existing:
+        with open(subs_path, 'a', encoding='utf-8') as f:
+            f.write(line)
+
+
+def _ensure_local_maildir_folder(md, local_folder):
+    """
+    Return a Maildir destination for local_folder.
+    INBOX maps to the root Maildir object. Other folders are auto-created.
+    """
+    if local_folder.upper() == 'INBOX':
+        return md
+
+    # Dovecot Maildir++ stores non-ASCII mailbox names on disk using
+    # IMAP modified UTF-7. Keep subscription names human-readable, but use
+    # encoded names for filesystem folder paths.
+    disk_folder = _encode_imap_folder(local_folder)
+
+    # One-time migration for folders previously created with raw UTF-8 names.
+    if disk_folder != local_folder:
+        old_path = os.path.join(md._path, '.' + local_folder)
+        new_path = os.path.join(md._path, '.' + disk_folder)
+        if os.path.isdir(old_path) and not os.path.exists(new_path):
+            os.rename(old_path, new_path)
+            _chown_tree(new_path)
+
+    try:
+        sub = md.get_folder(disk_folder)
+    except mailbox.NoSuchMailboxError:
+        md.add_folder(disk_folder)
+        sub = md.get_folder(disk_folder)
+
+    sub_path = getattr(sub, '_path', None)
+    if sub_path:
+        _chown_tree(sub_path)
+    _append_subscription(md, local_folder)
+    return sub
 
 def log(*args):
     ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
@@ -410,10 +618,7 @@ def ensure_maildir(account):
         # Fetcher runs as root; Dovecot expects uid=gid=1000.
         # chown the freshly created tree so Dovecot can access it immediately
         # without waiting for its own entrypoint chown on the next restart.
-        for dirpath, dirnames, filenames in os.walk(mailbox_root):
-            os.chown(dirpath, 1000, 1000)
-            for fname in filenames:
-                os.chown(os.path.join(dirpath, fname), 1000, 1000)
+        _chown_tree(mailbox_root)
 
 
 def fetch_imap(account, fetch_interval_min):
@@ -423,7 +628,7 @@ def fetch_imap(account, fetch_interval_min):
     use_ssl = ib.get('tls', False) and port == 993
     keep_for = parse_keep_remote(ib.get('keep_remote', False))
     fetch_depth = parse_fetch_depth(ib.get('fetch_depth'))
-    folders = [f.strip() for f in str(ib.get('folder', 'INBOX')).split(',') if f.strip()]
+    folder_mappings = _parse_imap_folder_mappings(ib.get('folder'))
     label = get_mailbox(account)
 
     search_since = compute_imap_search_since(fetch_depth, keep_for, fetch_interval_min, label)
@@ -445,17 +650,29 @@ def fetch_imap(account, fetch_interval_min):
 
         conn.login(ib['user'], ib['pass'])
 
+        # Keep an up-to-date IMAP folder inventory near mailbox data.
+        _update_imap_folders_file(conn, label)
+
         fetched = 0
         deleted = 0
         seen_keys = set()
 
-        for folder in folders:
-            encoded_folder = _encode_imap_folder(folder)
+        for remote_folder, local_folder in folder_mappings:
+            encoded_folder = _encode_imap_folder(remote_folder)
             sel_status, sel_data = conn.select(encoded_folder)
+
             if sel_status != 'OK':
-                log(f"WARNING IMAP {label}: cannot select folder {folder!r} "
+                log(f"WARNING IMAP {label}: cannot select folder {remote_folder!r} "
                     f"({encoded_folder!r}) on {host}: {sel_data}")
                 continue
+
+            try:
+                dst = _ensure_local_maildir_folder(md, local_folder)
+            except Exception as e:
+                log(f"WARNING IMAP {label}: cannot prepare local folder {local_folder!r} "
+                    f"for remote {remote_folder!r}: {e}")
+                continue
+
             if search_since is not None:
                 # Subtract 1 extra calendar day before formatting the SINCE date.
                 # IMAP SEARCH SINCE uses the server's internal message date, which
@@ -471,14 +688,14 @@ def fetch_imap(account, fetch_interval_min):
             else:
                 search_status, data = conn.uid('SEARCH', None, 'ALL')
             if search_status != 'OK' or not data or data[0] is None:
-                log(f"WARNING IMAP {label}: SEARCH failed in folder {folder!r} "
+                log(f"WARNING IMAP {label}: SEARCH failed in folder {remote_folder!r} "
                     f"on {host}: {data}")
                 continue
             uids = data[0].split()
 
             for uid_bytes in uids:
                 uid_str = uid_bytes.decode()
-                key = f'{folder}/{uid_str}'
+                key = f'{remote_folder}/{uid_str}'
                 seen_keys.add(key)
 
                 if key not in state:
@@ -493,7 +710,7 @@ def fetch_imap(account, fetch_interval_min):
                             continue  # too old; skip body download entirely
                     _, msg_data = conn.uid('FETCH', uid_bytes, '(RFC822)')
                     raw = msg_data[0][1]
-                    md.add(raw)
+                    dst.add(raw)
                     fetched += 1
                     if keep_for is False:
                         conn.uid('STORE', uid_bytes, '+FLAGS', '\\Deleted')

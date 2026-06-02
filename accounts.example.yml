@@ -107,10 +107,22 @@ accounts:
   # Use proto: imap when the remote server does not support POP3, or when you
   # need to fetch from a specific folder other than INBOX.
   #
-  # folder: comma-separated list of IMAP folders to fetch from (default: INBOX)
-  # keep_remote: false — delete messages after fetching (default)
-  # keep_remote: true  — leave messages on the server
-  # (all duration formats also apply, same as for POP3 above)
+  # folder: comma-separated IMAP mappings in one of two forms:
+  #   REMOTE          -> fetch from REMOTE and store into local INBOX
+  #   REMOTE>LOCAL    -> fetch from REMOTE and store into local LOCAL (instead of INBOX)
+  # Examples:
+  #   folder: INBOX, News, Sent>Sent
+  #   (equivalent to INBOX>INBOX, News>INBOX, Sent>Sent)
+  # Note: Use Sent>Sent to fetch from remote Sent and store into local Sent.
+  # This is useful when some users send mail directly through the remote
+  # provider: those messages end up in remote Sent and can then be mirrored
+  # into local Sent, making them visible over IMAP to everyone sharing
+  # the mailbox.
+  #
+  # keep_remote: same formats as for POP3
+  #   true  - keep indefinitely
+  #   false - delete immediately
+  #   10m, 7d, ... - keep for that duration
   #
   # fetch_depth: how far back IMAP SEARCH SINCE reaches (IMAP only).
   #   Default: unlimited (fetch everything not yet in state).
@@ -132,7 +144,7 @@ accounts:
       port: 993
       proto: imap
       tls: true
-      folder: INBOX               # optional; comma-separated, e.g. "INBOX, SPAM"
+      folder: INBOX, News, Sent>Sent  # optional; defaults to INBOX if omitted
       user: charlie@example.com
       pass: remote_password_here
       keep_remote: false

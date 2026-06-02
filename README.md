@@ -206,11 +206,31 @@ If the provider does not support POP3, or you need to fetch from a specific fold
       port: 993
       proto: imap
       tls: true
-      folder: INBOX               # optional; defaults to INBOX; comma-separated: "INBOX, Spam"
+      folder: INBOX, News, Sent>Sent  # optional; defaults to "INBOX" if omitted
       user: charlie@example.com
       pass: remote_password
       keep_remote: 5d             # delete after 5 days
 ```
+
+`folder` accepts a comma-separated list of mappings:
+
+- `REMOTE` means `REMOTE>INBOX` (fetched from remote `REMOTE`, stored into local `INBOX`).
+- `REMOTE>LOCAL` maps a remote folder to a specific local folder.
+
+Example: `INBOX, News, Sent>Sent` is interpreted as `INBOX>INBOX, News>INBOX, Sent>Sent`.
+
+`Sent>Sent` is useful when some users send mail directly via the remote provider:
+those messages appear in remote Sent and can be mirrored into local Sent so they
+are visible to all users sharing this proxied mailbox. 
+Another valid use case is the initial migration to this solution set, including importing the Sent folder history.
+
+During each IMAP fetch cycle, mailproxy updates `maildata/<mailbox>/imap_folders.txt`.
+This file contains one remote folder per line with two tab-separated columns:
+the full folder path and the LIST flags returned by the remote IMAP server.
+
+Some providers expose non-standard/localized system folder names. So, Sent folder could have some another name.
+To configure Sent correctly, inspect `imap_folders.txt` and choose the folder
+that has the `\Sent` flag.
 
 ## Configuration (.env)
 
