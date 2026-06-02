@@ -209,6 +209,7 @@ ENABLE_ROUNDCUBE=true     # uncomment to enable the web interface
 
 ROUNDCUBE_LISTEN=0.0.0.0  # bind address (0.0.0.0 = all interfaces, 127.0.0.1 = localhost only)
 ROUNDCUBE_PORT=8080       # HTTP port
+ROUNDCUBE_TITLE=Roundcube # custom browser/tab title (optional)
 ```
 
 ### IMAP server (Dovecot)

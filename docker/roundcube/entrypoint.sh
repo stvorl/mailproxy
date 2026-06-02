@@ -59,6 +59,12 @@ fi
 CONFIG=/var/www/html/config/config.inc.php
 echo '$config["log_driver"] = "file";' >> "$CONFIG"
 
+# Set custom page title if ROUNDCUBE_TITLE is provided.
+if [ -n "${ROUNDCUBE_TITLE:-}" ]; then
+    escaped=$(printf '%s' "$ROUNDCUBE_TITLE" | sed "s/'/\\\\'/g")
+    printf "\n\$config[\"product_name\"] = '%s';\n" "$escaped" >> "$CONFIG"
+fi
+
 # Ensure container-owned directories have correct permissions.
 # /var/www/html/logs may be a bind mount owned by host root after import.
 mkdir -p /var/www/html/logs /var/roundcube/db
