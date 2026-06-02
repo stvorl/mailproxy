@@ -1,5 +1,6 @@
 import time
 import re
+import calendar
 import poplib
 import imaplib
 import mailbox
@@ -9,6 +10,33 @@ import yaml
 from datetime import datetime, timedelta, timezone
 from email import message_from_bytes
 from email.utils import parsedate_to_datetime
+
+
+class _MonthOffset:
+    """Calendar-accurate month offset for keep_remote / fetch_depth.
+    Supports  datetime - _MonthOffset  (same day/time, N months back;
+    clamps to last day of month when the source day doesn't exist)."""
+    __slots__ = ('months',)
+
+    def __init__(self, months):
+        self.months = months
+
+    def __rsub__(self, dt):
+        m = dt.month - self.months
+        y = dt.year + (m - 1) // 12
+        m = (m - 1) % 12 + 1
+        d = min(dt.day, calendar.monthrange(y, m)[1])
+        return dt.replace(year=y, month=m, day=d)
+
+    def __repr__(self):
+        return f'_MonthOffset({self.months})'
+
+
+def _as_td_approx(d):
+    """Return timedelta approximation of d (30 d per month) for comparisons."""
+    if isinstance(d, _MonthOffset):
+        return timedelta(days=d.months * 30)
+    return d
 
 def log(*args):
     ts = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
@@ -69,7 +97,7 @@ def _parse_duration_str(s):
     if unit in ('d', 'D'):
         return timedelta(days=n)
     if unit == 'M':
-        return timedelta(days=n * 30)
+        return _MonthOffset(n)
     if unit == 'h':
         return timedelta(hours=n)
     if unit == 'm':
@@ -320,12 +348,12 @@ def compute_imap_search_since(fetch_depth, keep_for, fetch_interval_min, label):
     still visible between poll cycles and get properly deleted.
     fetch_depth: true/false do not require any adjustment.
     """
-    if isinstance(keep_for, timedelta):
+    if isinstance(keep_for, (timedelta, _MonthOffset)):
         buffer = timedelta(minutes=fetch_interval_min * 10)
-        min_required = keep_for + buffer
+        min_required = _as_td_approx(keep_for) + buffer
         if fetch_depth is None:
             return None  # unlimited always satisfies min_required
-        if fetch_depth < min_required:
+        if _as_td_approx(fetch_depth) < min_required:
             log(f"INFO {label}: fetch_depth extended from {fetch_depth} to "
                 f"{min_required} to cover keep_remote expiry window")
             return datetime.now(timezone.utc) - min_required
@@ -426,9 +454,9 @@ def fetch_imap(account, fetch_interval_min):
                     else:
                         state[key] = now.isoformat()
                         seen_keys.add(key)
-                elif isinstance(keep_for, timedelta):
+                elif isinstance(keep_for, (timedelta, _MonthOffset)):
                     fetch_time = datetime.fromisoformat(state[key])
-                    if (now - fetch_time) >= keep_for:
+                    if fetch_time <= (now - keep_for):
                         conn.uid('STORE', uid_bytes, '+FLAGS', '\\Deleted')
                         del state[key]
                         seen_keys.discard(key)
@@ -504,9 +532,9 @@ def fetch_pop3(account):
                     to_delete.append((num, uidl))
                 else:
                     state[uidl] = now.isoformat()
-            elif isinstance(keep_for, timedelta):
+            elif isinstance(keep_for, (timedelta, _MonthOffset)):
                 fetch_time = datetime.fromisoformat(state[uidl])
-                if (now - fetch_time) >= keep_for:
+                if fetch_time <= (now - keep_for):
                     to_delete.append((num, uidl))
 
         for num, uidl in to_delete:
