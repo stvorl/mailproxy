@@ -255,7 +255,9 @@ def get_mailbox(account):
 
 
 def ensure_maildir(account):
-    path = os.path.join(MAIL_BASE, get_mailbox(account), 'Maildir')
+    mailbox_root = os.path.join(MAIL_BASE, get_mailbox(account))
+    os.makedirs(mailbox_root, exist_ok=True)
+    path = os.path.join(mailbox_root, 'Maildir')
     mailbox.Maildir(path, create=True)
 
 
