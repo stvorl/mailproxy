@@ -320,6 +320,7 @@ SMTP_TLS=3
 |---|---|
 | `./mpcontrol init` | Создать рабочие конфигурации из шаблонов, подготовить компоненты к первому запуску |
 | `./mpcontrol up` | Собрать образы и запустить все сервисы |
+| `./mpcontrol reindex [mailbox ...]` | Пересобрать индексы полнотекстового поиска Dovecot. Без аргументов: все почтовые ящики из `accounts.yml` (`accounts[].address`). С аргументами: только указанные ящики, например `./mpcontrol reindex mail1@somewhere.com mail2@somewhere.com`. |
 | `./mpcontrol down` | Остановить все сервисы |
 | `./mpcontrol restart` | `down` + `up` |
 | `./mpcontrol rebuild` | Принудительно пересобрать образы без кэша Docker (после обновления базовых образов) |
@@ -327,6 +328,8 @@ SMTP_TLS=3
 | `./mpcontrol export <имя>` | Остановить сервисы и упаковать `maildata/`, `rcdata/`, `certs/`, `logs/`, `accounts.yml`, `.env` в архив |
 | `./mpcontrol import <имя>` | Распаковать архив в директорию проекта (сервисы не запускаются) |
 | `./mpcontrol clean` | Остановить сервисы и **безвозвратно удалить** все данные (`maildata/`, `rcdata/`, `certs/`, `accounts.yml`, `.env`). Требует ввода `YES` для подтверждения. |
+
+Если `DOVECOT_FTS=true`, команда `reindex` также обновляет полнотекстовые индексы. При `DOVECOT_FTS=false` обновляются только базовые индексы почтовых ящиков Dovecot.
 
 ## Безопасность
 

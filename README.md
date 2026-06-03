@@ -316,6 +316,7 @@ All management goes through the `mpcontrol` script.
 |---|---|
 | `./mpcontrol init` | Create working configs from templates, prepare for first run |
 | `./mpcontrol up` | Build images and start all services |
+| `./mpcontrol reindex [mailbox ...]` | Rebuild Dovecot full text search indexes. No arguments: all account mailboxes from `accounts.yml` (`accounts[].address`). With arguments: only listed mailboxes, e.g. `./mpcontrol reindex mail1@somewhere.com mail2@somewhere.com`. |
 | `./mpcontrol down` | Stop all services |
 | `./mpcontrol restart` | `down` + `up` |
 | `./mpcontrol rebuild` | Force-rebuild images without Docker cache (use after base image updates) |
@@ -323,6 +324,8 @@ All management goes through the `mpcontrol` script.
 | `./mpcontrol export <file>` | Stop services and pack `maildata/`, `rcdata/`, `certs/`, `logs/`, `accounts.yml`, `.env` into an archive |
 | `./mpcontrol import <file>` | Unpack archive into project directory (does not start services) |
 | `./mpcontrol clean` | Stop services and **permanently delete** all data (`maildata/`, `rcdata/`, `certs/`, `accounts.yml`, `.env`). Requires typing `YES` to confirm. |
+
+When `DOVECOT_FTS=true`, `reindex` also refreshes full-text search indexes. With `DOVECOT_FTS=false`, it refreshes only base Dovecot mailbox indexes.
 
 ## Security
 
