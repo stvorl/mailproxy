@@ -65,6 +65,45 @@ if [ -n "${ROUNDCUBE_TITLE:-}" ]; then
     printf "\n\$config[\"product_name\"] = '%s';\n" "$escaped" >> "$CONFIG"
 fi
 
+# Attachment size limits
+# ROUNDCUBE_MAX_MESSAGE_SIZE   — Roundcube max_message_size (entire message)
+# ROUNDCUBE_MAX_ATTACHMENT_SIZE — PHP upload_max_filesize (single file)
+# PHP post_max_size = ROUNDCUBE_MAX_MESSAGE_SIZE + 10%
+ROUNDCUBE_MAX_MESSAGE_SIZE=${ROUNDCUBE_MAX_MESSAGE_SIZE:-8M}
+ROUNDCUBE_MAX_ATTACHMENT_SIZE=${ROUNDCUBE_MAX_ATTACHMENT_SIZE:-5M}
+
+# Roundcube max_message_size
+printf "\n\$config[\"max_message_size\"] = '%s';\n" "$ROUNDCUBE_MAX_MESSAGE_SIZE" >> "$CONFIG"
+
+# awk helper: human-readable size + 10%, ceiled
+to_php_size() {
+    awk -v val="$1" 'BEGIN {
+        n = substr(val, 1, length(val)-1);
+        s = substr(val, length(val));
+        if (s == "K" || s == "k") mult = 1024;
+        else if (s == "M" || s == "m") mult = 1048576;
+        else if (s == "G" || s == "g") mult = 1073741824;
+        else { mult = 1; n = val; }
+        bytes = int(n * mult * 1.1);
+        if (bytes >= 1073741824 && bytes % 1073741824 == 0) printf "%.0fG", bytes / 1073741824;
+        else if (bytes >= 1073741824) printf "%.0fG", int(bytes / 1073741824) + 1;
+        else if (bytes >= 1048576) printf "%.0fM", int(bytes / 1048576) + 1;
+        else if (bytes >= 1024) printf "%.0fK", int(bytes / 1024) + 1;
+        else printf "%.0f", bytes;
+    }'
+}
+
+UPLOAD_SIZE="$ROUNDCUBE_MAX_ATTACHMENT_SIZE"
+POST_SIZE=$(to_php_size "$ROUNDCUBE_MAX_MESSAGE_SIZE")
+
+# Write PHP ini overrides — must load AFTER roundcube-defaults.ini (hence zzz- prefix)
+PHP_CONF_DIR=/usr/local/etc/php/conf.d
+mkdir -p "$PHP_CONF_DIR"
+cat > "$PHP_CONF_DIR/zzz-mailproxy.ini" << PHPEOF
+upload_max_filesize = $UPLOAD_SIZE
+post_max_size = $POST_SIZE
+PHPEOF
+
 # Ensure container-owned directories have correct permissions.
 # /var/www/html/logs may be a bind mount owned by host root after import.
 mkdir -p /var/www/html/logs /var/roundcube/db

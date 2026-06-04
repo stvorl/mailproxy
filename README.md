@@ -245,11 +245,28 @@ Roundcube is available by default at **http://\<hostname\>:8080**.
 
 ```sh
 ENABLE_ROUNDCUBE=true     # uncomment to enable the web interface
+```
 
+Set the following parameters to specify how the Roundcube web server will respond:
+
+```sh
 ROUNDCUBE_LISTEN=0.0.0.0  # bind address (0.0.0.0 = all interfaces, 127.0.0.1 = localhost only)
 ROUNDCUBE_PORT=8080       # HTTP port
 ROUNDCUBE_TITLE=Roundcube # custom browser/tab title (optional)
 ```
+
+Set attachment limits:
+```sh
+MAX_MESSAGE_SIZE=16M                 # Postfix message_size_limit (entire SMTP message)
+ROUNDCUBE_MAX_MESSAGE_SIZE=15M       # Roundcube max_message_size (entire composed message)
+ROUNDCUBE_MAX_ATTACHMENT_SIZE=5M     # max single file upload (PHP upload_max_filesize)
+```
+
+- `MAX_MESSAGE_SIZE` — Postfix `message_size_limit`; the maximum size of an entire SMTP message (headers + body + attachments **after** base64 MIME encoding, i.e. +33%). Applies to all mail submission, both from Roundcube and from external clients.
+- `ROUNDCUBE_MAX_MESSAGE_SIZE` — Roundcube `max_message_size`; the maximum message size accepted through the web compose form (also **after** MIME encoding, i.e. +33%). PHP `post_max_size` is set to this value +10 % automatically.
+- `ROUNDCUBE_MAX_ATTACHMENT_SIZE` — PHP `upload_max_filesize`; the maximum size of a single uploaded file. Can be lower than `ROUNDCUBE_MAX_MESSAGE_SIZE` to limit individual attachments while allowing multiple files up to the total message limit.
+
+> **Note on base64 overhead:** binary attachments are base64-encoded in transit, adding ~33 % to their size. Both `MAX_MESSAGE_SIZE` and `ROUNDCUBE_MAX_MESSAGE_SIZE` refer to the *encoded* on-wire size. To allow a raw attachment of *N* MB, set the limit to at least *N* × 1.33 plus room for headers and body text.
 
 ### IMAP server (Dovecot)
 

@@ -55,6 +55,18 @@ case "$SMTP_TLS" in
         ;;
 esac
 
+# Message size limit from MAX_MESSAGE_SIZE
+MAX_MESSAGE_SIZE=${MAX_MESSAGE_SIZE:-25M}
+MSG_NUM="${MAX_MESSAGE_SIZE%[MmGgKk]}"
+MSG_SUF="${MAX_MESSAGE_SIZE##*[0-9]}"
+case "$MSG_SUF" in
+    K|k) MSG_SIZE_LIMIT=$((MSG_NUM * 1024)) ;;
+    M|m) MSG_SIZE_LIMIT=$((MSG_NUM * 1048576)) ;;
+    G|g) MSG_SIZE_LIMIT=$((MSG_NUM * 1073741824)) ;;
+    *) MSG_SIZE_LIMIT=$MSG_NUM ;;
+esac
+postconf -e "message_size_limit = $MSG_SIZE_LIMIT"
+
 MAPS_DIR=/var/credentials
 
 # Wait up to 90 seconds for the fetcher to generate relay maps.
